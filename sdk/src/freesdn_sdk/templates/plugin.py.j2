@@ -1,0 +1,43 @@
+"""
+{plugin_name} - FreeSDN Plugin
+"""
+
+from fastapi import APIRouter
+from freesdn_sdk import FreeSDNPlugin
+
+
+class {class_name}(FreeSDNPlugin):
+    """Main plugin class for {plugin_name}."""
+
+    async def on_install(self, db=None):
+        """Called once when the plugin is first installed."""
+        pass
+
+    async def on_start(self, organization_id, db=None):
+        """Called every time FreeSDN starts for this organization.
+
+        After calling super().on_start(), self.ctx is available
+        with access to devices, alerts, events, settings, and http.
+        """
+        await super().on_start(organization_id, db)
+
+        # Example: list devices
+        # devices = await self.ctx.devices.list(status="online")
+        # self.ctx.logger.info("Found %d online devices", len(devices))
+
+    async def on_uninstall(self, db=None):
+        """Called just before the plugin is removed. Clean up here."""
+        pass
+
+    def get_router(self) -> APIRouter:
+        """Return a FastAPI router with this plugin's API endpoints."""
+        router = APIRouter()
+
+        @router.get("/")
+        async def index():
+            return {{
+                "plugin": "{plugin_id}",
+                "status": "running",
+            }}
+
+        return router

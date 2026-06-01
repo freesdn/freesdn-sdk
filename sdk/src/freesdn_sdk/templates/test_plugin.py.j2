@@ -1,0 +1,44 @@
+"""
+Tests for {plugin_name}
+"""
+
+import pytest
+
+from freesdn_sdk.testing import create_test_context
+
+from plugin import {class_name}
+
+
+@pytest.fixture
+def ctx():
+    """Create a test context with mock SDK implementations."""
+    return create_test_context(
+        plugin_id="{plugin_id}",
+        devices=[
+            {{"id": "d1", "name": "Switch-1", "status": "online", "type": "switch"}},
+            {{"id": "d2", "name": "AP-1", "status": "offline", "type": "access_point"}},
+        ],
+    )
+
+
+@pytest.fixture
+def plugin(ctx):
+    """Create a plugin instance with test context."""
+    p = {class_name}()
+    p.ctx = ctx
+    return p
+
+
+@pytest.mark.asyncio
+async def test_on_start(plugin, ctx):
+    """Test that the plugin starts without errors."""
+    await plugin.on_start(ctx.organization_id)
+
+
+@pytest.mark.asyncio
+async def test_router(plugin):
+    """Test that get_router returns a valid APIRouter."""
+    router = plugin.get_router()
+    assert router is not None
+    # Router should have at least one route
+    assert len(router.routes) > 0

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "freesdn"
+version = "0.1.0"
+description = "FreeSDN - Open-source Software-Defined Networking platform"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "FreeSDN", email = "contact@freesdn.org" },
+]
+keywords = ["freesdn", "sdn", "network", "management", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Networking",
+]
+dependencies = [
+    "freesdn-sdk>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/freesdn/freesdn"
+Documentation = "https://docs.freesdn.org"
+Repository = "https://github.com/freesdn/freesdn"
+Issues = "https://github.com/freesdn/freesdn/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/freesdn"]

@@ -1,0 +1,47 @@
+# FreeSDN Plugin Manifest
+# See: https://docs.freesdn.org/plugins/manifest-reference
+
+id: {plugin_id}
+name: {plugin_name}
+version: 1.0.0
+description: "{description}"
+author: "{author}"
+license: MIT
+min_core_version: 2.6.0
+
+entry_point: plugin.py
+class_name: {class_name}
+
+# Declare permissions your plugin needs.
+# Available: devices.read, alerts.read, alerts.write
+permissions:
+  - code: devices.read
+    name: Read Devices
+    description: Access the device inventory
+
+# Subscribe to events from the FreeSDN event bus.
+# Use dot-notation with wildcards: device.status.*, alert.created
+event_subscriptions:
+  - device.status.*
+
+# REST API prefix (mounted at /api/v1<api_prefix>/)
+api_prefix: {api_prefix}
+
+# Navigation items shown in the FreeSDN sidebar
+nav_items:
+  - path: {api_prefix}
+    label: {plugin_name}
+    icon: Package
+    order: 50
+
+# Optional JSON Schema for plugin settings
+# settings_schema:
+#   type: object
+#   properties:
+#     interval_minutes:
+#       type: integer
+#       default: 60
+
+# Python packages to install in the plugin's isolated venv
+# python_dependencies:
+#   - requests>=2.28
