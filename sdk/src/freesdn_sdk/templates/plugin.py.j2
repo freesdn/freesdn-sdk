@@ -25,12 +25,37 @@ class {class_name}(FreeSDNPlugin):
         # devices = await self.ctx.devices.list(status="online")
         # self.ctx.logger.info("Found %d online devices", len(devices))
 
+    async def on_event(self, event):
+        """Called for every event matching event_subscriptions in plugin.yaml.
+
+        Runs on the PER-ORGANIZATION instance. See get_router() below before
+        you store anything on self and expect a route to read it back.
+        """
+        pass
+
     async def on_uninstall(self, db=None):
         """Called just before the plugin is removed. Clean up here."""
         pass
 
     def get_router(self) -> APIRouter:
-        """Return a FastAPI router with this plugin's API endpoints."""
+        """Return a FastAPI router with this plugin's API endpoints.
+
+        IMPORTANT: `self` in here is the shared TEMPLATE instance, not the
+        per-organization one. Lifecycle hooks and on_event() run on a separate
+        per-org instance, so state written there is NOT visible through `self`
+        in a route. Nothing raises; the data is simply on another object.
+
+            async def on_event(self, event):
+                self.seen.append(event.event_type)      # per-org instance
+
+            @router.get("/seen")
+            async def seen():
+                len(self.seen)              # always 0
+                len(self.runtime.seen)      # what you meant
+
+        `self.ctx` is already request-aware and needs no such care; it resolves
+        to the calling organization's context on its own.
+        """
         router = APIRouter()
 
         @router.get("/")

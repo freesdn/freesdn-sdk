@@ -7,7 +7,11 @@ version: 1.0.0
 description: "{description}"
 author: "{author}"
 license: MIT
-min_core_version: 2.6.0
+# The oldest FreeSDN this plugin supports. FreeSDN uses calendar versioning
+# (YY.MM.PATCH), and an install is refused when the core is older than this.
+# 26.06.1 is the first public release, so it is the widest compatible floor.
+# Raise it when you start depending on something newer.
+min_core_version: 26.06.1
 
 entry_point: plugin.py
 class_name: {class_name}

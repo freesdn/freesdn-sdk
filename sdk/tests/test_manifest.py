@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from freesdn_sdk.manifest import PluginManifest
 
-
 # ── Valid manifests ──────────────────────────────────────────────────
 
 
@@ -84,15 +83,18 @@ def test_from_yaml_file(tmp_path):
 # ── Invalid ID patterns ─────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("bad_id", [
-    "A",                     # Too short (single char), uppercase
-    "Hello-World",           # Uppercase letters
-    "-leading-dash",         # Leading dash
-    "trailing-dash-",        # Trailing dash
-    "has spaces",            # Spaces
-    "has.dots",              # Dots
-    "x" * 102,              # Too long
-])
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "A",  # Too short (single char), uppercase
+        "Hello-World",  # Uppercase letters
+        "-leading-dash",  # Leading dash
+        "trailing-dash-",  # Trailing dash
+        "has spaces",  # Spaces
+        "has.dots",  # Dots
+        "x" * 102,  # Too long
+    ],
+)
 def test_invalid_id_rejected(bad_id):
     yaml = f"""\
 id: "{bad_id}"
@@ -107,12 +109,33 @@ class_name: TestPlugin
 # ── Reserved IDs ─────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("reserved_id", [
-    "admin", "auth", "api", "core", "system", "devices", "alerts",
-    "users", "settings", "backup", "vpn", "automation", "webhooks",
-    "ai", "collector", "integrations", "plugins", "marketplace",
-    "health", "status", "metrics", "internal",
-])
+@pytest.mark.parametrize(
+    "reserved_id",
+    [
+        "admin",
+        "auth",
+        "api",
+        "core",
+        "system",
+        "devices",
+        "alerts",
+        "users",
+        "settings",
+        "backup",
+        "vpn",
+        "automation",
+        "webhooks",
+        "ai",
+        "collector",
+        "integrations",
+        "plugins",
+        "marketplace",
+        "health",
+        "status",
+        "metrics",
+        "internal",
+    ],
+)
 def test_reserved_id_rejected(reserved_id):
     yaml = f"""\
 id: {reserved_id}
@@ -127,13 +150,16 @@ class_name: TestPlugin
 # ── Invalid version ─────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("bad_version", [
-    "1.0",           # Missing patch
-    "1.0.0.0",       # Extra segment
-    "1.0.a",         # Non-numeric
-    "v1.0.0",        # Prefix
-    "latest",        # Not semver
-])
+@pytest.mark.parametrize(
+    "bad_version",
+    [
+        "1.0",  # Missing patch
+        "1.0.0.0",  # Extra segment
+        "1.0.a",  # Non-numeric
+        "v1.0.0",  # Prefix
+        "latest",  # Not semver
+    ],
+)
 def test_invalid_version_rejected(bad_version):
     yaml = f"""\
 id: test-plugin
@@ -148,15 +174,18 @@ class_name: TestPlugin
 # ── Entry point validation ──────────────────────────────────────────
 
 
-@pytest.mark.parametrize("bad_entry", [
-    "../escape.py",       # Path traversal
-    "/absolute.py",       # Absolute path
-    "\\\\windows.py",    # Windows path
-    "plugin.txt",        # Not .py
-    "plugin!.py",        # Invalid characters
-    "plugin$.py",        # Invalid characters
-    "plugin name.py",    # Spaces
-])
+@pytest.mark.parametrize(
+    "bad_entry",
+    [
+        "../escape.py",  # Path traversal
+        "/absolute.py",  # Absolute path
+        "\\\\windows.py",  # Windows path
+        "plugin.txt",  # Not .py
+        "plugin!.py",  # Invalid characters
+        "plugin$.py",  # Invalid characters
+        "plugin name.py",  # Spaces
+    ],
+)
 def test_invalid_entry_point_rejected(bad_entry):
     yaml = f"""\
 id: test-plugin
@@ -169,12 +198,15 @@ entry_point: "{bad_entry}"
         PluginManifest.from_yaml_string(yaml)
 
 
-@pytest.mark.parametrize("good_entry", [
-    "plugin.py",
-    "my_plugin.py",
-    "src/plugin.py",
-    "plugins/my-plugin.py",
-])
+@pytest.mark.parametrize(
+    "good_entry",
+    [
+        "plugin.py",
+        "my_plugin.py",
+        "src/plugin.py",
+        "plugins/my-plugin.py",
+    ],
+)
 def test_valid_entry_point_accepted(good_entry):
     yaml = f"""\
 id: test-plugin
@@ -190,13 +222,16 @@ entry_point: "{good_entry}"
 # ── Class name validation ───────────────────────────────────────────
 
 
-@pytest.mark.parametrize("bad_class", [
-    "123NotValid",     # Starts with digit
-    "has-dashes",      # Dashes
-    "has spaces",      # Spaces
-    "_PrivatePlugin",  # Leading underscore
-    "__DunderPlugin",  # Double underscore
-])
+@pytest.mark.parametrize(
+    "bad_class",
+    [
+        "123NotValid",  # Starts with digit
+        "has-dashes",  # Dashes
+        "has spaces",  # Spaces
+        "_PrivatePlugin",  # Leading underscore
+        "__DunderPlugin",  # Double underscore
+    ],
+)
 def test_invalid_class_name_rejected(bad_class):
     yaml = f"""\
 id: test-plugin
@@ -211,12 +246,15 @@ class_name: "{bad_class}"
 # ── API prefix validation ───────────────────────────────────────────
 
 
-@pytest.mark.parametrize("good_prefix", [
-    "/my-plugin",
-    "/acme",
-    "/my_plugin/v2",
-    "/a1",
-])
+@pytest.mark.parametrize(
+    "good_prefix",
+    [
+        "/my-plugin",
+        "/acme",
+        "/my_plugin/v2",
+        "/a1",
+    ],
+)
 def test_valid_api_prefix_accepted(good_prefix):
     yaml = f"""\
 id: test-plugin
@@ -234,13 +272,16 @@ def test_api_prefix_none_accepted():
     assert m.api_prefix is None
 
 
-@pytest.mark.parametrize("bad_prefix", [
-    "no-leading-slash",     # Missing /
-    "/UPPERCASE",           # Uppercase
-    "/../admin",            # Path traversal
-    "/has spaces",          # Spaces
-    "/has$pecial",          # Special characters
-])
+@pytest.mark.parametrize(
+    "bad_prefix",
+    [
+        "no-leading-slash",  # Missing /
+        "/UPPERCASE",  # Uppercase
+        "/../admin",  # Path traversal
+        "/has spaces",  # Spaces
+        "/has$pecial",  # Special characters
+    ],
+)
 def test_invalid_api_prefix_rejected(bad_prefix):
     yaml = f"""\
 id: test-plugin
@@ -256,12 +297,15 @@ api_prefix: "{bad_prefix}"
 # ── Python dependencies validation ──────────────────────────────────
 
 
-@pytest.mark.parametrize("good_deps", [
-    ["requests>=2.28"],
-    ["httpx>=0.24", "pydantic>=2.0"],
-    ["my-package==1.0.0"],
-    ["PyYAML>=6.0"],
-])
+@pytest.mark.parametrize(
+    "good_deps",
+    [
+        ["requests>=2.28"],
+        ["httpx>=0.24", "pydantic>=2.0"],
+        ["my-package==1.0.0"],
+        ["PyYAML>=6.0"],
+    ],
+)
 def test_valid_python_deps_accepted(good_deps):
     deps_yaml = "\n".join(f"  - {d}" for d in good_deps)
     yaml = f"""\
@@ -276,13 +320,16 @@ python_dependencies:
     assert m.python_dependencies == good_deps
 
 
-@pytest.mark.parametrize("bad_dep", [
-    "-e git+https://attacker.com/evil.git",   # pip -e flag
-    "-r requirements.txt",                     # pip -r flag
-    "--index-url https://evil.com/simple",     # pip option
-    "module;rm -rf /",                         # Semicolon injection
-    "!invalid",                                # Special char start
-])
+@pytest.mark.parametrize(
+    "bad_dep",
+    [
+        "-e git+https://attacker.com/evil.git",  # pip -e flag
+        "-r requirements.txt",  # pip -r flag
+        "--index-url https://evil.com/simple",  # pip option
+        "module;rm -rf /",  # Semicolon injection
+        "!invalid",  # Special char start
+    ],
+)
 def test_invalid_python_dep_rejected(bad_dep):
     yaml = f"""\
 id: test-plugin
@@ -299,11 +346,14 @@ python_dependencies:
 # ── Homepage validation ─────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("good_url", [
-    "https://example.com",
-    "http://localhost:8080",
-    "https://github.com/freesdn/freesdn",
-])
+@pytest.mark.parametrize(
+    "good_url",
+    [
+        "https://example.com",
+        "http://localhost:8080",
+        "https://github.com/freesdn/freesdn",
+    ],
+)
 def test_valid_homepage_accepted(good_url):
     yaml = f"""\
 id: test-plugin
@@ -316,12 +366,15 @@ homepage: "{good_url}"
     assert m.homepage == good_url
 
 
-@pytest.mark.parametrize("bad_url", [
-    "ftp://example.com",          # Not http/https
-    "javascript:alert(1)",        # XSS
-    "file:///etc/passwd",         # Local file
-    "data:text/html,<h1>hi</h1>", # Data URI
-])
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "ftp://example.com",  # Not http/https
+        "javascript:alert(1)",  # XSS
+        "file:///etc/passwd",  # Local file
+        "data:text/html,<h1>hi</h1>",  # Data URI
+    ],
+)
 def test_invalid_homepage_rejected(bad_url):
     yaml = f"""\
 id: test-plugin

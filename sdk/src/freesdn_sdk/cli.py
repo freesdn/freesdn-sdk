@@ -90,8 +90,7 @@ def init(
     # Validate plugin ID
     if not re.match(r"^[a-z0-9][a-z0-9\-]{0,98}[a-z0-9]$", name):
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"Plugin ID '{name}' is invalid. "
+            click.style("Error: ", fg="red") + f"Plugin ID '{name}' is invalid. "
             "Use lowercase alphanumeric characters and hyphens (min 2 chars, e.g. 'my-plugin').",
             err=True,
         )
@@ -101,8 +100,7 @@ def init(
 
     if name in RESERVED_PLUGIN_IDS:
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"Plugin ID '{name}' is reserved by FreeSDN.",
+            click.style("Error: ", fg="red") + f"Plugin ID '{name}' is reserved by FreeSDN.",
             err=True,
         )
         sys.exit(1)
@@ -116,7 +114,7 @@ def init(
                 err=True,
             )
             sys.exit(1)
-        if not re.match(r'^/[a-z0-9][a-z0-9/_-]*$', api_prefix):
+        if not re.match(r"^/[a-z0-9][a-z0-9/_-]*$", api_prefix):
             click.echo(
                 click.style("Error: ", fg="red")
                 + "API prefix must start with '/' and contain only "
@@ -132,16 +130,14 @@ def init(
     # Ensure the output directory exists and is writable
     if not output_base.exists():
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"Output directory '{output_dir}' does not exist.",
+            click.style("Error: ", fg="red") + f"Output directory '{output_dir}' does not exist.",
             err=True,
         )
         sys.exit(1)
 
     if plugin_dir.exists():
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"Directory '{plugin_dir}' already exists.",
+            click.style("Error: ", fg="red") + f"Directory '{plugin_dir}' already exists.",
             err=True,
         )
         sys.exit(1)
@@ -206,8 +202,7 @@ def validate(path: str) -> None:
 
     if not manifest_path.exists():
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"No plugin.yaml found in {plugin_dir}",
+            click.style("Error: ", fg="red") + f"No plugin.yaml found in {plugin_dir}",
             err=True,
         )
         sys.exit(1)
@@ -226,15 +221,13 @@ def validate(path: str) -> None:
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"File not found: {manifest_path}",
+            click.style("Error: ", fg="red") + f"File not found: {manifest_path}",
             err=True,
         )
         sys.exit(1)
     except Exception as e:
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"Failed to parse plugin.yaml: {type(e).__name__}",
+            click.style("Error: ", fg="red") + f"Failed to parse plugin.yaml: {type(e).__name__}",
             err=True,
         )
         sys.exit(1)
@@ -264,11 +257,7 @@ def validate(path: str) -> None:
     try:
         source = entry_path.read_text(encoding="utf-8")
         tree = ast.parse(source)
-        class_names = [
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ClassDef)
-        ]
+        class_names = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
         if manifest.class_name not in class_names:
             click.echo(
                 click.style("Error: ", fg="red")
@@ -279,8 +268,7 @@ def validate(path: str) -> None:
             sys.exit(1)
     except SyntaxError as e:
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"Syntax error in {manifest.entry_point}: {e}",
+            click.style("Error: ", fg="red") + f"Syntax error in {manifest.entry_point}: {e}",
             err=True,
         )
         sys.exit(1)
@@ -328,8 +316,7 @@ def package(path: str, output: str | None) -> None:
 
     if not manifest_path.exists():
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"No plugin.yaml found in {plugin_dir}",
+            click.style("Error: ", fg="red") + f"No plugin.yaml found in {plugin_dir}",
             err=True,
         )
         sys.exit(1)
@@ -348,15 +335,13 @@ def package(path: str, output: str | None) -> None:
         sys.exit(1)
     except FileNotFoundError:
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"File not found: {manifest_path}",
+            click.style("Error: ", fg="red") + f"File not found: {manifest_path}",
             err=True,
         )
         sys.exit(1)
     except Exception as e:
         click.echo(
-            click.style("Error: ", fg="red")
-            + f"Failed to parse plugin.yaml: {type(e).__name__}",
+            click.style("Error: ", fg="red") + f"Failed to parse plugin.yaml: {type(e).__name__}",
             err=True,
         )
         sys.exit(1)
@@ -368,8 +353,14 @@ def package(path: str, output: str | None) -> None:
 
     # Patterns to skip
     skip_dirs = {
-        "__pycache__", ".git", ".venv", "venv", "node_modules",
-        ".mypy_cache", ".pytest_cache", ".ruff_cache",
+        "__pycache__",
+        ".git",
+        ".venv",
+        "venv",
+        "node_modules",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
     }
     skip_extensions = {".pyc", ".pyo"}
     skip_files = {".DS_Store", "Thumbs.db", ".env", ".env.local"}
@@ -380,10 +371,7 @@ def package(path: str, output: str | None) -> None:
 
     for root, dirs, filenames in os.walk(plugin_dir):
         # Filter directories - skip hidden dirs and known junk
-        dirs[:] = [
-            d for d in dirs
-            if d not in skip_dirs and not d.startswith(".")
-        ]
+        dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
 
         for filename in filenames:
             if filename in skip_files:
@@ -466,12 +454,33 @@ def check(path: str) -> None:
 
     # Dangerous builtin calls - these are removed from plugin __builtins__
     dangerous_calls = {
-        "exec", "eval", "compile", "__import__", "open", "breakpoint",
-        "globals", "locals", "vars",
+        "exec",
+        "eval",
+        "compile",
+        "__import__",
+        "open",
+        "breakpoint",
+        "globals",
+        "locals",
+        "vars",
     }
 
-    # Build import patterns from BLOCKED_MODULES
-    blocked_top_level = {m.split(".")[0] for m in BLOCKED_MODULES}
+    def _is_blocked(fullname: str) -> bool:
+        """Exactly what the sandbox does -- see ``app.plugins.sandbox``.
+
+        A name is blocked if it matches, or if one of its PARENTS is blocked:
+        blocking ``os`` also blocks ``os.path.join``.
+
+        This used to test the opposite relationship, matching any name whose
+        top-level package appeared anywhere in the blocklist. That inverts it.
+        ``asyncio.subprocess`` is blocked and ``asyncio`` is not, so every
+        plugin doing ``import asyncio`` -- which is every plugin that awaits
+        anything -- was told the runtime would refuse it. The runtime does not.
+        """
+        if fullname in BLOCKED_MODULES:
+            return True
+        parts = fullname.split(".")
+        return any(".".join(parts[:i]) in BLOCKED_MODULES for i in range(1, len(parts)))
 
     py_files = list(plugin_dir.rglob("*.py"))
     if not py_files:
@@ -503,42 +512,53 @@ def check(path: str) -> None:
             # Check import statements
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name in BLOCKED_MODULES or alias.name in blocked_top_level:
-                        issues.append((
-                            str(rel),
-                            node.lineno,
-                            "error",
-                            f"Blocked import: '{alias.name}' is not allowed in plugins. "
-                            "Use the Plugin SDK (self.ctx) for safe system access.",
-                        ))
+                    if _is_blocked(alias.name):
+                        issues.append(
+                            (
+                                str(rel),
+                                node.lineno,
+                                "error",
+                                f"Blocked import: '{alias.name}' is not allowed in plugins. "
+                                "Use the Plugin SDK (self.ctx) for safe system access.",
+                            )
+                        )
 
             elif isinstance(node, ast.ImportFrom):
                 if node.module:
                     mod = node.module
-                    top = mod.split(".")[0]
-                    if mod in BLOCKED_MODULES or top in blocked_top_level:
-                        issues.append((
-                            str(rel),
-                            node.lineno,
-                            "error",
-                            f"Blocked import: 'from {mod}' is not allowed in plugins.",
-                        ))
+                    if _is_blocked(mod):
+                        issues.append(
+                            (
+                                str(rel),
+                                node.lineno,
+                                "error",
+                                f"Blocked import: 'from {mod}' is not allowed in plugins.",
+                            )
+                        )
 
             # Check dangerous function calls
             elif isinstance(node, ast.Call):
-                func_name = None
-                if isinstance(node.func, ast.Name):
-                    func_name = node.func.id
-                elif isinstance(node.func, ast.Attribute):
-                    func_name = node.func.attr
+                # Only a BARE name can be a builtin. ``re.compile(...)`` is a
+                # module attribute and has nothing to do with the builtin
+                # ``compile``; reading ``node.func.attr`` conflated the two and
+                # reported the most common line in Python as a sandbox
+                # violation. Nothing is lost by ignoring attribute calls: the
+                # sandbox restricts builtins, and ``builtins`` is itself a
+                # blocked module, so ``builtins.eval(...)`` cannot get past the
+                # import check above.
+                func_name = node.func.id if isinstance(node.func, ast.Name) else None
 
                 if func_name in dangerous_calls:
-                    issues.append((
-                        str(rel),
-                        node.lineno,
-                        "warning" if func_name in ("open", "globals", "locals", "vars") else "error",
-                        f"Dangerous builtin: '{func_name}()' is blocked in the sandbox.",
-                    ))
+                    issues.append(
+                        (
+                            str(rel),
+                            node.lineno,
+                            "warning"
+                            if func_name in ("open", "globals", "locals", "vars")
+                            else "error",
+                            f"Dangerous builtin: '{func_name}()' is blocked in the sandbox.",
+                        )
+                    )
 
     # Print results
     if not issues:

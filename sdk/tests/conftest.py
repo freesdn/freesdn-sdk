@@ -19,9 +19,27 @@ def sample_devices() -> list[dict]:
     """A handful of devices for testing."""
     return [
         {"id": "d1", "name": "Switch-Core", "status": "online", "type": "switch", "site_id": "s1"},
-        {"id": "d2", "name": "AP-Lobby", "status": "offline", "type": "access_point", "site_id": "s1"},
-        {"id": "d3", "name": "Switch-Floor2", "status": "online", "type": "switch", "site_id": "s2"},
-        {"id": "d4", "name": "AP-Rooftop", "status": "unknown", "type": "access_point", "site_id": "s2"},
+        {
+            "id": "d2",
+            "name": "AP-Lobby",
+            "status": "offline",
+            "type": "access_point",
+            "site_id": "s1",
+        },
+        {
+            "id": "d3",
+            "name": "Switch-Floor2",
+            "status": "online",
+            "type": "switch",
+            "site_id": "s2",
+        },
+        {
+            "id": "d4",
+            "name": "AP-Rooftop",
+            "status": "unknown",
+            "type": "access_point",
+            "site_id": "s2",
+        },
     ]
 
 

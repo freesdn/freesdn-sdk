@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "freesdn-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Plugin SDK for building FreeSDN plugins - base classes, testing utilities, and CLI tools"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "FreeSDN", email = "contact@freesdn.org" },
+    { name = "PyPV - Python Platform Ventures", email = "contact@freesdn.org" },
 ]
 keywords = ["freesdn", "plugin", "sdk", "network", "sdn", "automation"]
 classifiers = [

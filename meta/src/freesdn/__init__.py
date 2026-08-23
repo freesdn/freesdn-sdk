@@ -1,32 +1,31 @@
 """
-FreeSDN - Open-source Software-Defined Networking Platform
-============================================================
+FreeSDN - the short import path for the plugin SDK
+==================================================
 
-This package re-exports everything from ``freesdn-sdk`` so that plugin
-developers can use the shorter import path::
+This package is a convenience wrapper. It re-exports ``freesdn-sdk`` so a
+plugin can use the shorter path::
 
     from freesdn import FreeSDNPlugin, PluginContext
 
-This is exactly equivalent to::
+which is exactly equivalent to::
 
     from freesdn_sdk import FreeSDNPlugin, PluginContext
 
-The canonical package is ``freesdn-sdk``.  Install either one::
+The canonical package is ``freesdn-sdk``; this one exists only so the obvious
+name on PyPI leads somewhere useful. The FreeSDN platform itself is a separate
+product under AGPL-3.0-only -- it is not distributed here.
 
-    pip install freesdn        # pulls in freesdn-sdk automatically
-    pip install freesdn-sdk    # standalone
-
-See: https://docs.freesdn.org/plugins/getting-started
+The names below are re-exported EXPLICITLY rather than with ``import *``,
+because the entire value of this package is that ``from freesdn import ...``
+autocompletes and type-checks; a star import degrades the one thing it is for.
+The cost of writing them out is that the list can fall behind the SDK, so a
+test asserts the two are identical, and there is no third place to update: the
+SDK's own surface is in turn pinned to what the FreeSDN runtime provides.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-# Re-export everything from freesdn-sdk
-from freesdn_sdk import (  # noqa: F401
-    BLOCKED_MODULES,
-    PLUGIN_LIMITS,
-    RESERVED_PLUGIN_IDS,
-    SAFE_BUILTINS,
+from freesdn_sdk import (
     AlertSDK,
     DeviceSDK,
     Event,
@@ -34,18 +33,15 @@ from freesdn_sdk import (  # noqa: F401
     EventPriority,
     EventSDK,
     FreeSDNPlugin,
+    MetricsSDK,
     PluginContext,
-    PluginError,
+    PluginCoordinator,
     PluginHTTPClient,
     PluginManifest,
-    PluginNotInstalledError,
-    PluginPermissionError,
+    PluginNotReady,
     PluginSecurityError,
     PluginSettingsSDK,
-    PluginState,
-    PluginValidationError,
-    SSRFBlockedError,
-    TokenBudgetExceededError,
+    SiteSDK,
 )
 
 __all__ = [
@@ -54,28 +50,20 @@ __all__ = [
     # Context & SDK interfaces
     "PluginContext",
     "DeviceSDK",
+    "SiteSDK",
     "AlertSDK",
+    "MetricsSDK",
     "EventSDK",
     "PluginSettingsSDK",
     "PluginHTTPClient",
+    "PluginCoordinator",
     # Manifest
     "PluginManifest",
-    # Exceptions
-    "PluginError",
+    # Exceptions a plugin raises or catches
+    "PluginNotReady",
     "PluginSecurityError",
-    "PluginPermissionError",
-    "PluginValidationError",
-    "PluginNotInstalledError",
-    "SSRFBlockedError",
-    "TokenBudgetExceededError",
-    # Types & enums
+    # Events
     "Event",
-    "EventPriority",
     "EventCategory",
-    "PluginState",
-    # Constants
-    "BLOCKED_MODULES",
-    "SAFE_BUILTINS",
-    "PLUGIN_LIMITS",
-    "RESERVED_PLUGIN_IDS",
+    "EventPriority",
 ]

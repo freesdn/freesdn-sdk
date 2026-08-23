@@ -50,6 +50,50 @@ class FreeSDNPlugin:
     def __init__(self) -> None:
         self.ctx: PluginContext | None = None
 
+    @property
+    def runtime(self) -> FreeSDNPlugin:
+        """The per-organization instance serving the current request.
+
+        At runtime there are TWO kinds of instance, and the difference is
+        invisible until it bites:
+
+        * ONE shared template instance. Its ``get_router()`` builds the routes,
+          so ``self`` inside a route handler is the template.
+        * ONE runtime instance PER ORGANIZATION. Lifecycle hooks and
+          ``on_event()`` run on these.
+
+        So a plugin that records something in ``on_event()`` and reads it back
+        from a route finds nothing. The write went to the per-org instance and
+        the read came from the template. Nothing raises, the event genuinely
+        arrived, and the data is simply on another object.
+
+        ``self.ctx`` already resolves to the right context inside a request.
+        Use ``self.runtime`` when you need the INSTANCE, for per-organization
+        state you set yourself::
+
+            class MyPlugin(FreeSDNPlugin):
+                def __init__(self):
+                    super().__init__()
+                    self.seen = []
+
+                async def on_event(self, event):
+                    self.seen.append(event.event_type)   # per-org instance
+
+                def get_router(self):
+                    router = APIRouter()
+
+                    @router.get("/seen")
+                    async def seen():
+                        # self.seen would be empty here; self.runtime.seen is not
+                        return {"count": len(self.runtime.seen)}
+
+                    return router
+
+        Outside a request ``self`` is already the runtime instance, so this
+        returns ``self``. In this development stub it always returns ``self``.
+        """
+        return self
+
     # ── Lifecycle Hooks ─────────────────────────────────────────────
 
     async def on_install(self, db: Any) -> None:

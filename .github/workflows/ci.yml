@@ -1,0 +1,182 @@
+name: CI
+
+# Public CI for github.com/freesdn/freesdn-sdk.
+#
+# This repo had no .github directory at all. It is the package third parties
+# `pip install` to write FreeSDN plugins, so it is the one repo where a defect
+# lands in someone else's codebase rather than ours, and it was the only one
+# with nothing gating it. Seventeen lint findings had accrued unnoticed.
+#
+# The SDK/runtime contract is NOT checked here. Verifying it needs both this
+# package and the FreeSDN backend, so it lives in the monorepo as
+# tests/plugins/test_sdk_contract.py, which fails if the published surface and
+# the runtime alias stop matching. This workflow is what can be proven from
+# this repo alone: it lints, it is formatted, its tests pass, and the wheel it
+# produces installs and imports on every Python it claims to support.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # A plugin author installs this package weeks after we last touched it, so a
+  # newly-disclosed CVE in a pinned dependency needs to surface without a push.
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject declares requires-python >=3.11. Every version in that
+        # range is tested, because the floor is a promise to anyone installing
+        # on an older distro, not an aspiration.
+        python: ['3.11', '3.12', '3.13', '3.14']
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install SDK with dev extras
+        working-directory: sdk
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Ruff lint
+        working-directory: sdk
+        # tests/ as well as src/. Excluding tests is how the agent accrued 58
+        # findings, one of which was a test that declared a list of expected
+        # values and never asserted against it.
+        run: ruff check src tests
+
+      - name: Ruff format check
+        working-directory: sdk
+        run: ruff format --check src tests
+
+      - name: Tests
+        working-directory: sdk
+        run: python -m pytest -q
+
+      # The `freesdn` meta package re-exports this one so a plugin can write
+      # `from freesdn import ...`. It ships from this repo, had no tests and no
+      # CI, and broke the moment the SDK's surface was corrected: its
+      # hand-written import list named attributes that no longer existed, so
+      # `import freesdn` raised on its first line. Nobody would have known
+      # before someone ran `pip install freesdn`.
+      - name: Install the freesdn meta package
+        working-directory: meta
+        run: pip install -e '.[dev]' --no-deps && pip install pytest ruff
+
+      - name: Ruff lint (meta)
+        working-directory: meta
+        run: ruff check src tests
+
+      - name: Ruff format check (meta)
+        working-directory: meta
+        run: ruff format --check src tests
+
+      - name: The short import path must match the SDK exactly
+        working-directory: meta
+        run: python -m pytest -q
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Build sdist and wheel
+        working-directory: sdk
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: Build the meta package too
+        working-directory: meta
+        run: python -m build
+
+      - name: Metadata must be valid for PyPI
+        run: twine check sdk/dist/* meta/dist/*
+
+      # Building a wheel proves it packages; installing it from a clean
+      # interpreter proves it packages the right files. A src-layout project
+      # can pass its own tests via the editable install and still ship a wheel
+      # missing a subpackage.
+      - name: Wheel installs clean and exposes its public surface
+        working-directory: sdk
+        run: |
+          python -m venv /tmp/verify
+          /tmp/verify/bin/pip install --quiet dist/*.whl
+          /tmp/verify/bin/python - <<'PY'
+          import freesdn_sdk
+          from freesdn_sdk import FreeSDNPlugin, PluginCoordinator, PluginNotReady
+          missing = [n for n in freesdn_sdk.__all__ if not hasattr(freesdn_sdk, n)]
+          assert not missing, f"__all__ names the wheel does not provide: {missing}"
+          print(f"freesdn-sdk {freesdn_sdk.__version__}: {len(freesdn_sdk.__all__)} exports OK")
+          PY
+
+      - name: The CLI entry point runs
+        working-directory: sdk
+        run: |
+          /tmp/verify/bin/pip install --quiet dist/*.whl
+          /tmp/verify/bin/freesdn-sdk --help
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: dist
+          path: sdk/dist/
+
+  audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Install
+        working-directory: sdk
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip install -e '.[dev]'
+
+      # Blocking, deliberately: this package is installed into other people's
+      # environments, so a known-vulnerable dependency here is their problem
+      # before it is ours. pydantic, fastapi, pyyaml and click are real runtime
+      # requirements, and this is what watches them.
+      #
+      # No --strict, and that is not laziness. --strict fails the run when any
+      # distribution cannot be audited, and freesdn-sdk itself cannot be: the
+      # version in this repo is by definition not the one on PyPI. That would
+      # make the job red on every commit for ever, which teaches everyone to
+      # ignore it. Without --strict the SDK is reported as skipped, with the
+      # reason printed, and an actual advisory against a dependency still fails.
+      - name: pip-audit
+        working-directory: sdk
+        run: pip-audit

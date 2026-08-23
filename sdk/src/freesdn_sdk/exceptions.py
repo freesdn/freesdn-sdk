@@ -66,3 +66,25 @@ class SSRFBlockedError(PluginError):
 
 class TokenBudgetExceededError(PluginError):
     """Raised when an LLM operation would exceed the organization's monthly token budget."""
+
+
+class PluginNotReady(RuntimeError):
+    """The plugin is fine; the thing it talks to is not.
+
+    Borrowed from Home Assistant's ``ConfigEntryNotReady``. Raise it and the
+    failure is recorded, surfaced, and RETRIED with backoff -- it never counts
+    toward quarantine, because there is no fault here to protect the platform
+    from::
+
+        if not await self._reachable():
+            raise PluginNotReady("NetBox at netbox.lan is not responding")
+
+    Anything else raising is still treated as a fault, which is the right
+    default: a plugin that does not know why it failed should not be able to
+    opt out of supervision.
+
+    Deliberately NOT a subclass of :class:`PluginError`. It mirrors
+    ``app.plugins.supervision.PluginNotReady``, which derives from
+    ``RuntimeError``, and the runtime substitutes that class for this one -- so
+    a hierarchy invented here would not exist where it actually counts.
+    """

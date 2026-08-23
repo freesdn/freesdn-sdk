@@ -15,14 +15,18 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
-
 
 # ── Event System ─────────────────────────────────────────────────────
 
 
-class EventPriority(str, Enum):
+# These mirror ``app.core.events`` and ``app.plugins.supervision``, which use
+# StrEnum. The difference is not stylistic: with ``(str, Enum)``,
+# ``str(EventPriority.HIGH)`` is "EventPriority.HIGH", and with StrEnum it is
+# "high". An author formatting a priority into a log line or a payload would
+# have got one answer in their offline tests and the other in production.
+class EventPriority(StrEnum):
     """Event processing priority (mirrors ``app.core.events.EventPriority``)."""
 
     LOW = "low"
@@ -31,7 +35,7 @@ class EventPriority(str, Enum):
     CRITICAL = "critical"
 
 
-class EventCategory(str, Enum):
+class EventCategory(StrEnum):
     """High-level event categories (mirrors ``app.core.events.EventCategory``)."""
 
     SYSTEM = "system"
@@ -42,6 +46,7 @@ class EventCategory(str, Enum):
     SECURITY = "security"
     USER = "user"
     TASK = "task"
+    VPN = "vpn"
 
 
 @dataclass
@@ -114,7 +119,7 @@ class Event:
 # ── Plugin State ─────────────────────────────────────────────────────
 
 
-class PluginState(str, Enum):
+class PluginState(StrEnum):
     """Lifecycle state of an installed plugin."""
 
     INSTALLED = "installed"
@@ -129,91 +134,200 @@ class PluginState(str, Enum):
 #: Modules blocked by the FreeSDN plugin sandbox.
 #: Importing any of these inside a plugin raises ``PluginSecurityError``.
 #: This is an exact copy of ``app.plugins.sandbox.BLOCKED_MODULES``.
-BLOCKED_MODULES: frozenset[str] = frozenset({
-    # OS & filesystem
-    "os", "os.path", "sys", "shutil", "pathlib",
-    "io", "tempfile", "_io",
-    # Process execution
-    "subprocess", "asyncio.subprocess", "_subprocess",
-    # Network (use self.ctx.http instead)
-    "socket", "_socket",
-    "http", "http.client", "http.server",
-    "urllib", "urllib.request", "urllib.parse",
-    "webbrowser",
-    # Dynamic loading / code execution
-    "importlib", "importlib.import_module",
-    "runpy", "compileall", "codeop", "code",
-    # Native code / FFI
-    "ctypes", "cffi", "_ctypes",
-    # Serialization (code execution risk)
-    "pickle", "_pickle", "marshal", "shelve",
-    # Concurrency (resource exhaustion)
-    "multiprocessing", "threading", "_thread",
-    # System primitives
-    "signal", "resource", "pwd", "grp", "pty", "tty", "termios",
-    "sysconfig", "site",
-    # Introspection (frame access, caller variable access)
-    "inspect", "gc",
-    # Exit hooks
-    "atexit",
-    # Builtins override
-    "builtins",
-})
+BLOCKED_MODULES: frozenset[str] = frozenset(
+    {
+        "_ctypes",
+        "_pickle",
+        "_socket",
+        "_subprocess",
+        "asyncio.subprocess",
+        "atexit",
+        "builtins",
+        "cffi",
+        "code",
+        "codeop",
+        "compileall",
+        "ctypes",
+        "gc",
+        "grp",
+        "http",
+        "http.client",
+        "http.server",
+        "imp",
+        "importlib",
+        "importlib.abc",
+        "importlib.import_module",
+        "importlib.machinery",
+        "importlib.util",
+        "inspect",
+        "io",
+        "linecache",
+        "marshal",
+        "multiprocessing",
+        "os",
+        "os.path",
+        "pathlib",
+        "pickle",
+        "pkgutil",
+        "pty",
+        "pwd",
+        "resource",
+        "runpy",
+        "shelve",
+        "shutil",
+        "signal",
+        "site",
+        "socket",
+        "subprocess",
+        "sys",
+        "sysconfig",
+        "tempfile",
+        "termios",
+        "threading",
+        "tokenize",
+        "tty",
+        "urllib",
+        "urllib.parse",
+        "urllib.request",
+        "webbrowser",
+    }
+)
 
 #: Builtins that are allowed in the plugin sandbox.
 #: Everything not in this set is stripped from ``__builtins__``.
-SAFE_BUILTINS: frozenset[str] = frozenset({
-    # Types & constructors
-    "bool", "int", "float", "complex", "str", "bytes", "bytearray",
-    "list", "tuple", "dict", "set", "frozenset",
-    "property", "classmethod", "staticmethod",
-    "slice", "range", "memoryview",
-    # Functions
-    "abs", "all", "any", "ascii", "bin", "callable", "chr",
-    "divmod", "enumerate", "filter", "format", "hasattr",
-    "hash", "hex", "id", "isinstance", "issubclass",
-    "iter", "len", "map", "max", "min", "next", "oct", "ord",
-    "pow", "print", "repr", "reversed", "round", "sorted", "sum", "zip",
-    # Async
-    "aiter", "anext",
-    # Constants
-    "None", "True", "False", "Ellipsis",
-    "__name__", "__doc__",
-    # Exceptions (all standard)
-    "ArithmeticError", "AssertionError", "AttributeError",
-    "BaseException", "BlockingIOError", "BrokenPipeError",
-    "BufferError", "BytesWarning",
-    "ChildProcessError", "ConnectionAbortedError",
-    "ConnectionError", "ConnectionRefusedError",
-    "ConnectionResetError",
-    "DeprecationWarning",
-    "EOFError", "EnvironmentError", "Exception",
-    "FileExistsError", "FileNotFoundError", "FloatingPointError",
-    "FutureWarning",
-    "GeneratorExit",
-    "IOError", "ImportError", "ImportWarning",
-    "IndentationError", "IndexError", "InterruptedError",
-    "IsADirectoryError",
-    "KeyError", "KeyboardInterrupt",
-    "LookupError",
-    "MemoryError", "ModuleNotFoundError",
-    "NameError", "NotADirectoryError", "NotImplemented",
-    "NotImplementedError",
-    "OSError", "OverflowError",
-    "PendingDeprecationWarning", "PermissionError",
-    "ProcessLookupError",
-    "RecursionError", "ReferenceError", "ResourceWarning",
-    "RuntimeError", "RuntimeWarning",
-    "StopAsyncIteration", "StopIteration",
-    "SyntaxError", "SyntaxWarning", "SystemError", "SystemExit",
-    "TabError", "TimeoutError", "TypeError",
-    "UnboundLocalError", "UnicodeDecodeError",
-    "UnicodeEncodeError", "UnicodeError", "UnicodeTranslateError",
-    "UnicodeWarning", "UserWarning",
-    "ValueError",
-    "Warning",
-    "ZeroDivisionError",
-})
+SAFE_BUILTINS: frozenset[str] = frozenset(
+    {
+        "ArithmeticError",
+        "AssertionError",
+        "AttributeError",
+        "BaseException",
+        "BlockingIOError",
+        "BrokenPipeError",
+        "BufferError",
+        "BytesWarning",
+        "ChildProcessError",
+        "ConnectionAbortedError",
+        "ConnectionError",
+        "ConnectionRefusedError",
+        "ConnectionResetError",
+        "DeprecationWarning",
+        "EOFError",
+        "Ellipsis",
+        "EnvironmentError",
+        "Exception",
+        "False",
+        "FileExistsError",
+        "FileNotFoundError",
+        "FloatingPointError",
+        "FutureWarning",
+        "GeneratorExit",
+        "IOError",
+        "ImportError",
+        "ImportWarning",
+        "IndentationError",
+        "IndexError",
+        "InterruptedError",
+        "IsADirectoryError",
+        "KeyError",
+        "KeyboardInterrupt",
+        "LookupError",
+        "MemoryError",
+        "ModuleNotFoundError",
+        "NameError",
+        "None",
+        "NotADirectoryError",
+        "NotImplemented",
+        "NotImplementedError",
+        "OSError",
+        "OverflowError",
+        "PendingDeprecationWarning",
+        "PermissionError",
+        "ProcessLookupError",
+        "RecursionError",
+        "ReferenceError",
+        "ResourceWarning",
+        "RuntimeError",
+        "RuntimeWarning",
+        "StopAsyncIteration",
+        "StopIteration",
+        "SyntaxError",
+        "SyntaxWarning",
+        "SystemError",
+        "SystemExit",
+        "TabError",
+        "TimeoutError",
+        "True",
+        "TypeError",
+        "UnboundLocalError",
+        "UnicodeDecodeError",
+        "UnicodeEncodeError",
+        "UnicodeError",
+        "UnicodeTranslateError",
+        "UnicodeWarning",
+        "UserWarning",
+        "ValueError",
+        "Warning",
+        "ZeroDivisionError",
+        "__build_class__",
+        "__doc__",
+        "__name__",
+        "abs",
+        "aiter",
+        "all",
+        "anext",
+        "any",
+        "ascii",
+        "bin",
+        "bool",
+        "bytearray",
+        "bytes",
+        "callable",
+        "chr",
+        "classmethod",
+        "complex",
+        "dict",
+        "divmod",
+        "enumerate",
+        "filter",
+        "float",
+        "format",
+        "frozenset",
+        "getattr",
+        "hasattr",
+        "hash",
+        "hex",
+        "id",
+        "int",
+        "isinstance",
+        "issubclass",
+        "iter",
+        "len",
+        "list",
+        "map",
+        "max",
+        "memoryview",
+        "min",
+        "next",
+        "oct",
+        "ord",
+        "pow",
+        "print",
+        "property",
+        "range",
+        "repr",
+        "reversed",
+        "round",
+        "set",
+        "slice",
+        "sorted",
+        "staticmethod",
+        "str",
+        "sum",
+        "super",
+        "tuple",
+        "zip",
+    }
+)
 
 
 # ── Plugin Limits ────────────────────────────────────────────────────
@@ -223,11 +337,11 @@ PLUGIN_LIMITS: dict[str, int | float] = {
     "max_triggers_per_plugin": 50,
     "max_actions_per_plugin": 50,
     "max_ai_tools_per_plugin": 20,
-    "max_zip_compressed_bytes": 50 * 1024 * 1024,       # 50 MB
-    "max_zip_uncompressed_bytes": 200 * 1024 * 1024,     # 200 MB
+    "max_zip_compressed_bytes": 50 * 1024 * 1024,  # 50 MB
+    "max_zip_uncompressed_bytes": 200 * 1024 * 1024,  # 200 MB
     "max_python_dependencies": 50,
     "max_http_timeout_seconds": 60.0,
-    "max_http_response_bytes": 10 * 1024 * 1024,         # 10 MB
+    "max_http_response_bytes": 10 * 1024 * 1024,  # 10 MB
     "max_manifest_id_length": 100,
     "max_manifest_name_length": 200,
     "max_manifest_description_length": 2000,
@@ -235,10 +349,38 @@ PLUGIN_LIMITS: dict[str, int | float] = {
 }
 
 #: Reserved plugin IDs that cannot be used.
-RESERVED_PLUGIN_IDS: frozenset[str] = frozenset({
-    "admin", "auth", "api", "core", "system",
-    "devices", "alerts", "users", "settings",
-    "backup", "vpn", "automation", "webhooks",
-    "ai", "collector", "integrations", "plugins",
-    "marketplace", "health", "status", "metrics", "internal",
-})
+RESERVED_PLUGIN_IDS: frozenset[str] = frozenset(
+    {
+        "access_control",
+        "admin",
+        "ai",
+        "alerts",
+        "api",
+        "auth",
+        "automation",
+        "backup",
+        "cameras",
+        "collector",
+        "core",
+        "devices",
+        "fabric",
+        "firewall",
+        "gateway",
+        "health",
+        "hypervisor",
+        "integrations",
+        "internal",
+        "marketplace",
+        "metrics",
+        "network",
+        "plugins",
+        "settings",
+        "status",
+        "storage",
+        "system",
+        "users",
+        "voip",
+        "vpn",
+        "webhooks",
+    }
+)

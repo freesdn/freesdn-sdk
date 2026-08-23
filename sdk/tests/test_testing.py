@@ -16,7 +16,6 @@ from freesdn_sdk.testing import (
     create_test_context,
 )
 
-
 # ── MockDeviceSDK ────────────────────────────────────────────────────
 
 
@@ -67,10 +66,13 @@ class TestMockDeviceSDK:
 
     @pytest.mark.asyncio
     async def test_get_ports(self, mock_devices):
-        mock_devices.add_ports("d1", [
-            {"id": "p1", "name": "eth0", "status": "up"},
-            {"id": "p2", "name": "eth1", "status": "down"},
-        ])
+        mock_devices.add_ports(
+            "d1",
+            [
+                {"id": "p1", "name": "eth0", "status": "up"},
+                {"id": "p2", "name": "eth1", "status": "down"},
+            ],
+        )
         ports = await mock_devices.get_ports(UUID("00000000-0000-0000-0000-000000000001"))
         # Won't match since port key is "d1" not the UUID string
         assert ports == []
@@ -316,16 +318,20 @@ class TestCreateTestContext:
         assert ctx.organization_id == org_id
 
     def test_pre_populated_devices(self):
-        ctx = create_test_context(devices=[
-            {"id": "d1", "name": "Switch"},
-        ])
+        ctx = create_test_context(
+            devices=[
+                {"id": "d1", "name": "Switch"},
+            ]
+        )
         assert isinstance(ctx.devices, MockDeviceSDK)
 
     @pytest.mark.asyncio
     async def test_devices_accessible(self):
-        ctx = create_test_context(devices=[
-            {"id": "d1", "name": "Switch", "status": "online"},
-        ])
+        ctx = create_test_context(
+            devices=[
+                {"id": "d1", "name": "Switch", "status": "online"},
+            ]
+        )
         devices = await ctx.devices.list()
         assert len(devices) == 1
 

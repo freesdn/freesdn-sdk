@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PluginDependency(BaseModel):
@@ -43,23 +43,86 @@ class PluginNavItem(BaseModel):
 
 
 #: Regex for valid python dependency specifications.
-_PYTHON_DEP_PATTERN = re.compile(
-    r'^[a-zA-Z0-9][a-zA-Z0-9._-]*([<>=!~]+[a-zA-Z0-9_.* ]+)?$'
-)
+_PYTHON_DEP_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*([<>=!~]+[a-zA-Z0-9_.* ]+)?$")
 
 #: Regex for valid entry_point file names.
-_ENTRY_POINT_PATTERN = re.compile(r'^[a-zA-Z0-9_/\-]+\.py$')
+_ENTRY_POINT_PATTERN = re.compile(r"^[a-zA-Z0-9_/\-]+\.py$")
 
 #: Regex for valid api_prefix values.
-_API_PREFIX_PATTERN = re.compile(r'^/[a-z0-9][a-z0-9/_-]*$')
+_API_PREFIX_PATTERN = re.compile(r"^/[a-z0-9][a-z0-9/_-]*$")
 
 #: Reserved IDs that must not be used by plugins (core module namespaces).
-_RESERVED_IDS: frozenset[str] = frozenset({
-    "admin", "auth", "api", "core", "system", "devices", "alerts",
-    "users", "settings", "backup", "vpn", "automation", "webhooks",
-    "ai", "collector", "integrations", "plugins", "marketplace",
-    "health", "status", "metrics", "internal",
-})
+_RESERVED_IDS: frozenset[str] = frozenset(
+    {
+        "admin",
+        "auth",
+        "api",
+        "core",
+        "system",
+        "devices",
+        "alerts",
+        "users",
+        "settings",
+        "backup",
+        "vpn",
+        "automation",
+        "webhooks",
+        "ai",
+        "collector",
+        "integrations",
+        "plugins",
+        "marketplace",
+        "health",
+        "status",
+        "metrics",
+        "internal",
+    }
+)
+
+
+class PluginSchedule(BaseModel):
+    """A method FreeSDN runs on a timer, per organization.
+
+    Mirrors the platform's own constraints, so ``freesdn-sdk validate`` catches
+    a bad schedule at your desk rather than at install time on somebody's
+    instance. Before this existed the field was accepted and silently dropped:
+    a typo in ``method`` validated cleanly and then produced a schedule that
+    never ran.
+    """
+
+    #: Unique within the plugin. Appears in health output and log lines.
+    name: str = Field(pattern=r"^[a-z0-9][a-z0-9_]{0,62}[a-z0-9]$")
+    #: An async method on your plugin class, called with no arguments.
+    method: str
+    #: The floor exists because a schedule is unattended: a plugin that runs
+    #: every 5 seconds and scans every device is a self-inflicted denial of
+    #: service that nobody is watching.
+    interval_seconds: int = Field(ge=60, le=86_400)
+    #: Shown to the operator, in the consent dialog AND on the plugin's page in
+    #: the registry. Write it for somebody deciding whether they want this
+    #: running while they sleep.
+    description: str = Field(default="", max_length=500)
+    #: Whether it runs on install or waits to be switched on. Ship anything
+    #: that writes to an external system as False.
+    enabled_by_default: bool = True
+
+    @field_validator("method")
+    @classmethod
+    def _validate_method(cls, v: str) -> str:
+        if not v.isidentifier():
+            raise ValueError("method must be a valid Python identifier")
+        if v.startswith("_"):
+            raise ValueError(
+                "method must not start with an underscore -- a schedule is a "
+                "public entry point, not an internal helper"
+            )
+        if v in {"on_start", "on_stop", "on_event", "get_router"}:
+            raise ValueError(
+                f"method {v!r} is a lifecycle hook; a schedule must call a "
+                "method of its own. Running on_start on a timer re-initialises "
+                "a runtime that is already started."
+            )
+        return v
 
 
 class PluginManifest(BaseModel):
@@ -71,7 +134,7 @@ class PluginManifest(BaseModel):
     passes SDK validation it will also pass at installation time.
     """
 
-    id: str = Field(pattern=r'^[a-z0-9][a-z0-9\-]{0,98}[a-z0-9]$')
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9\-]{0,98}[a-z0-9]$")
     name: str = Field(min_length=1, max_length=200)
     version: str
     description: str = Field(default="", max_length=2000)
@@ -91,6 +154,23 @@ class PluginManifest(BaseModel):
     event_subscriptions: list[str] = Field(default=[])
     settings_schema: dict[str, Any] | None = None
     python_dependencies: list[str] = Field(default=[], max_length=50)
+    #: Methods FreeSDN runs on a timer. Max 10.
+    schedules: list[PluginSchedule] = Field(default=[], max_length=10)
+
+    @model_validator(mode="after")
+    def _validate_schedule_names(self) -> PluginManifest:
+        """Names must be unique, matching the platform.
+
+        Duplicates collide on the scheduler's claim key, so two schedules
+        declared 15 minutes apart silently become one -- and the one that
+        vanished is still listed in the UI.
+        """
+        seen: set[str] = set()
+        for sched in self.schedules:
+            if sched.name in seen:
+                raise ValueError(f"duplicate schedule name {sched.name!r}")
+            seen.add(sched.name)
+        return self
 
     @field_validator("id")
     @classmethod
@@ -152,9 +232,7 @@ class PluginManifest(BaseModel):
                     "Only package names with version pins are allowed."
                 )
             if dep_stripped.startswith("-") or ";" in dep_stripped:
-                raise ValueError(
-                    f"Dependency spec contains disallowed characters: '{dep}'"
-                )
+                raise ValueError(f"Dependency spec contains disallowed characters: '{dep}'")
         return deps
 
     @field_validator("homepage")
@@ -178,7 +256,8 @@ class PluginManifest(BaseModel):
             FileNotFoundError: If the file doesn't exist.
         """
         import yaml
-        with open(path, "r", encoding="utf-8") as f:
+
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return cls.model_validate(data)
 
@@ -186,5 +265,6 @@ class PluginManifest(BaseModel):
     def from_yaml_string(cls, content: str) -> PluginManifest:
         """Parse and validate a YAML string."""
         import yaml
+
         data = yaml.safe_load(content)
         return cls.model_validate(data)

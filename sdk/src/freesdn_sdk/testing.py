@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID, uuid4
@@ -40,11 +41,12 @@ from freesdn_sdk.context import (
     AlertSDK,
     DeviceSDK,
     EventSDK,
+    MetricsSDK,
     PluginContext,
     PluginHTTPClient,
     PluginSettingsSDK,
+    SiteSDK,
 )
-
 
 # ── Mock Response ────────────────────────────────────────────────────
 
@@ -72,9 +74,7 @@ class MockResponse:
     def raise_for_status(self) -> None:
         """Raise if status_code >= 400."""
         if self.status_code >= 400:
-            raise RuntimeError(
-                f"Mock HTTP error: {self.status_code}"
-            )
+            raise RuntimeError(f"Mock HTTP error: {self.status_code}")
 
 
 # ── Mock SDK Classes ─────────────────────────────────────────────────
@@ -211,10 +211,12 @@ class MockEventSDK(EventSDK):
 
     async def emit(self, event_type: str, payload: dict[str, Any]) -> None:
         """Record an emitted event."""
-        self.emitted.append({
-            "event_type": event_type,
-            "payload": payload,
-        })
+        self.emitted.append(
+            {
+                "event_type": event_type,
+                "payload": payload,
+            }
+        )
 
     def subscribe(self, event_pattern: str) -> None:
         """Record a subscription pattern."""
@@ -232,10 +234,7 @@ class MockEventSDK(EventSDK):
             if event["event_type"] != event_type:
                 continue
             if payload_subset:
-                if all(
-                    event["payload"].get(k) == v
-                    for k, v in payload_subset.items()
-                ):
+                if all(event["payload"].get(k) == v for k, v in payload_subset.items()):
                     return
             else:
                 return
@@ -255,6 +254,94 @@ class MockEventSDK(EventSDK):
     def reset(self) -> None:
         """Clear all recorded events."""
         self.emitted.clear()
+
+
+class MockSiteSDK(SiteSDK):
+    """In-memory SiteSDK for tests.
+
+    Seed it with the sites your plugin should see::
+
+        ctx = create_test_context(sites=[{"id": "s1", "name": "Main Site"}])
+    """
+
+    def __init__(self, sites: list[dict[str, Any]] | None = None) -> None:
+        self._sites = list(sites or [])
+
+    async def list(self, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+        return self._sites[offset : offset + limit]
+
+    async def iter_all(self, page_size: int = 500) -> AsyncIterator[dict[str, Any]]:
+        for site in self._sites:
+            yield site
+
+    async def get(self, site_id: Any) -> dict[str, Any] | None:
+        return next((s for s in self._sites if str(s.get("id")) == str(site_id)), None)
+
+
+class MockMetricsSDK(MetricsSDK):
+    """In-memory MetricsSDK for tests.
+
+    ``available()`` returns False unless you seed points, which is the honest
+    default: most deployments a plugin runs on have no time-series tier, and a
+    plugin that only works when one exists should fail in YOUR tests rather
+    than on somebody's lite install.
+    """
+
+    def __init__(self, points: dict[str, list[dict[str, Any]]] | None = None) -> None:
+        self._points = dict(points or {})
+
+    async def available(self) -> bool:
+        return bool(self._points)
+
+    async def metric_names(self, *, hours: float = 24.0) -> list[str]:
+        return sorted(self._points)
+
+    async def query(
+        self,
+        metric_name: str,
+        *,
+        hours: float = 24.0,
+        device_id: Any = None,
+        site_id: Any = None,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        rows = self._points.get(metric_name, [])
+        if device_id is not None:
+            rows = [r for r in rows if str(r.get("device_id")) == str(device_id)]
+        if site_id is not None:
+            rows = [r for r in rows if str(r.get("site_id")) == str(site_id)]
+        return rows[:limit]
+
+    async def latest(
+        self, metric_name: str, *, device_id: Any = None, hours: float = 24.0
+    ) -> dict[str, Any] | None:
+        rows = await self.query(metric_name, device_id=device_id, limit=1)
+        return rows[0] if rows else None
+
+    async def series(
+        self,
+        metric_name: str,
+        *,
+        hours: float = 24.0,
+        bucket_minutes: int = 60,
+        device_id: Any = None,
+        site_id: Any = None,
+        aggregation: str = "avg",
+    ) -> list[dict[str, Any]]:
+        rows = await self.query(metric_name, device_id=device_id, site_id=site_id, limit=10_000)
+        if not rows:
+            return []
+        values = [float(r["value"]) for r in rows if r.get("value") is not None]
+        if not values:
+            return []
+        agg = {
+            "avg": sum(values) / len(values),
+            "min": min(values),
+            "max": max(values),
+            "sum": sum(values),
+            "count": float(len(values)),
+        }[aggregation]
+        return [{"time": rows[0].get("time"), "value": agg, "samples": len(values)}]
 
 
 class MockPluginSettingsSDK(PluginSettingsSDK):
@@ -339,11 +426,13 @@ class MockPluginHTTPClient(PluginHTTPClient):
 
     def _record(self, method: str, url: str, kwargs: dict[str, Any]) -> None:
         """Record a request."""
-        self.requests.append({
-            "method": method,
-            "url": url,
-            **kwargs,
-        })
+        self.requests.append(
+            {
+                "method": method,
+                "url": url,
+                **kwargs,
+            }
+        )
 
     async def get(self, url: str, **kwargs: Any) -> MockResponse:
         """Send a mock GET request."""
@@ -378,6 +467,8 @@ def create_test_context(
     plugin_id: str = "test-plugin",
     organization_id: UUID | None = None,
     devices: list[dict[str, Any]] | None = None,
+    sites: list[dict[str, Any]] | None = None,
+    metrics: dict[str, list[dict[str, Any]]] | None = None,
     settings: dict[str, Any] | None = None,
 ) -> PluginContext:
     """Create a fully-wired ``PluginContext`` backed by mock implementations.
@@ -409,9 +500,11 @@ def create_test_context(
         plugin_id=plugin_id,
         organization_id=org_id,
         devices=MockDeviceSDK(devices=devices),
+        sites=MockSiteSDK(sites=sites),
         alerts=MockAlertSDK(),
         events=MockEventSDK(),
         settings=MockPluginSettingsSDK(initial=settings),
+        metrics=MockMetricsSDK(points=metrics),
         http=MockPluginHTTPClient(),
         logger=logging.getLogger(f"freesdn.plugin.{plugin_id}"),
     )

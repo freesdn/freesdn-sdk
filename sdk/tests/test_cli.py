@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import zipfile
 
 import pytest
@@ -61,13 +60,21 @@ class TestInit:
         assert result.exit_code == 0, result.output
 
     def test_init_with_options(self, runner, tmp_path):
-        result = runner.invoke(main, [
-            "init", "acme-monitor",
-            "--author", "ACME Corp",
-            "--description", "Monitors ACME devices",
-            "--api-prefix", "/acme",
-            "--output-dir", str(tmp_path),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "init",
+                "acme-monitor",
+                "--author",
+                "ACME Corp",
+                "--description",
+                "Monitors ACME devices",
+                "--api-prefix",
+                "/acme",
+                "--output-dir",
+                str(tmp_path),
+            ],
+        )
         assert result.exit_code == 0
 
         manifest = (tmp_path / "acme-monitor" / "plugin.yaml").read_text()
@@ -91,27 +98,44 @@ class TestInit:
         assert "invalid" in result.output.lower()
 
     def test_init_invalid_api_prefix_traversal(self, runner, tmp_path):
-        result = runner.invoke(main, [
-            "init", "my-plugin",
-            "--api-prefix", "/../admin",
-            "--output-dir", str(tmp_path),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "init",
+                "my-plugin",
+                "--api-prefix",
+                "/../admin",
+                "--output-dir",
+                str(tmp_path),
+            ],
+        )
         assert result.exit_code != 0
         assert "traversal" in result.output.lower()
 
     def test_init_invalid_api_prefix_format(self, runner, tmp_path):
-        result = runner.invoke(main, [
-            "init", "my-plugin",
-            "--api-prefix", "no-leading-slash",
-            "--output-dir", str(tmp_path),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "init",
+                "my-plugin",
+                "--api-prefix",
+                "no-leading-slash",
+                "--output-dir",
+                str(tmp_path),
+            ],
+        )
         assert result.exit_code != 0
 
     def test_init_nonexistent_output_dir(self, runner, tmp_path):
-        result = runner.invoke(main, [
-            "init", "my-plugin",
-            "--output-dir", str(tmp_path / "nonexistent"),
-        ])
+        result = runner.invoke(
+            main,
+            [
+                "init",
+                "my-plugin",
+                "--output-dir",
+                str(tmp_path / "nonexistent"),
+            ],
+        )
         assert result.exit_code != 0
         assert "does not exist" in result.output
 
