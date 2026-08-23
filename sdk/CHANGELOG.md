@@ -5,6 +5,18 @@ All notable changes to the FreeSDN Plugin SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-23
+
+CI only. No change to the package.
+
+### Fixed
+
+- The dependency audit failed on its first public run. The GitHub runner image
+  ships `setuptools` 79.0.1, which carries PYSEC-2026-3447 (fixed in 83.0.0),
+  and it reaches the audited environment through the `build` dev dependency.
+  It is now upgraded before the audit -- auditing a build environment and then
+  declining to fix what the audit finds would be theatre.
+
 ## [0.2.0] - 2026-08-23
 
 The published package and the runtime it stands in for had drifted, in both

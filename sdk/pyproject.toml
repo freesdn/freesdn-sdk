@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "freesdn-sdk"
-version = "0.2.0"
+version = "0.2.1"
 description = "Plugin SDK for building FreeSDN plugins - base classes, testing utilities, and CLI tools"
 readme = "README.md"
 license = "MIT"

@@ -22,7 +22,7 @@ Quick Start::
 See: https://docs.freesdn.org/plugins/getting-started
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 from freesdn_sdk.base import FreeSDNPlugin
 from freesdn_sdk.context import (
