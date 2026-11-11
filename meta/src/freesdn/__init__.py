@@ -23,7 +23,7 @@ test asserts the two are identical, and there is no third place to update: the
 SDK's own surface is in turn pinned to what the FreeSDN runtime provides.
 """
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 from freesdn_sdk import (
     AlertSDK,

@@ -6,7 +6,7 @@
 SDK for building plugins for the [FreeSDN](https://freesdn.org) infrastructure
 controller.
 
-**License:** MIT &nbsp;|&nbsp; **PyPI:** `freesdn-sdk` &nbsp;|&nbsp; **Docs:** [docs.freesdn.org/plugins](https://docs.freesdn.org/plugins/) &nbsp;|&nbsp; **Core:** [github.com/freesdn/freesdn](https://github.com/freesdn/freesdn)
+**License:** MIT &nbsp;|&nbsp; **Package:** `freesdn-sdk` &nbsp;|&nbsp; **Docs:** [docs.freesdn.org/plugins](https://docs.freesdn.org/plugins/overview) &nbsp;|&nbsp; **Core:** [github.com/freesdn/freesdn](https://github.com/freesdn/freesdn)
 
 ---
 
@@ -35,19 +35,23 @@ This boundary exists so operators know exactly what they are agreeing to when
 they install a plugin. Review `plugin.yaml` and the plugin code before
 installing anything you did not write yourself.
 
-See [docs/PLUGIN-SYSTEM-SPEC.md](https://github.com/freesdn/freesdn/blob/main/docs/PLUGIN-SYSTEM-SPEC.md)
-in the core repo for the full spec and the plugin trust model.
+See the [plugin security model](https://docs.freesdn.org/plugins/security-model)
+and the [manifest reference](https://docs.freesdn.org/plugins/manifest-reference)
+for the full specification and the plugin trust model.
 
 ## Install
 
+`freesdn-sdk` is not on PyPI yet: the name there is a placeholder (0.0.1)
+that reserves it. Install a release from its tag:
+
 ```bash
-pip install freesdn-sdk
+pip install "freesdn-sdk @ git+https://github.com/freesdn/freesdn-sdk@v0.3.0#subdirectory=sdk"
 ```
 
 For development (includes test utilities, linting):
 
 ```bash
-pip install "freesdn-sdk[dev]"
+pip install "freesdn-sdk[dev] @ git+https://github.com/freesdn/freesdn-sdk@v0.3.0#subdirectory=sdk"
 ```
 
 Python 3.11+ required.
@@ -205,9 +209,10 @@ Two worked examples live in the
 
 ## Package notes
 
-This repo also contains the `freesdn` meta-package (a convenience wrapper so
-`pip install freesdn` pulls in `freesdn-sdk`). If you just want the SDK,
-`pip install freesdn-sdk` is the right target.
+This repo also contains the `freesdn` meta-package, a convenience wrapper that
+depends on `freesdn-sdk`. Like the SDK, it is not on PyPI yet, and installing
+it would look for `freesdn-sdk` there, so install the SDK itself as shown
+under Install.
 
 ## Contributing
 

@@ -13,14 +13,17 @@ injected automatically - this package is for **development-time** use.
 
 ## Installation
 
+`freesdn-sdk` is not on PyPI yet: the name there is a placeholder (0.0.1)
+that reserves it. Install a release from its tag:
+
 ```bash
-pip install freesdn-sdk
+pip install "freesdn-sdk @ git+https://github.com/freesdn/freesdn-sdk@v0.3.0#subdirectory=sdk"
 ```
 
 For development (tests + linting):
 
 ```bash
-pip install "freesdn-sdk[dev]"
+pip install "freesdn-sdk[dev] @ git+https://github.com/freesdn/freesdn-sdk@v0.3.0#subdirectory=sdk"
 ```
 
 ## Quick Start

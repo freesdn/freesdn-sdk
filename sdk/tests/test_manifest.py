@@ -62,14 +62,14 @@ settings_schema:
     check_interval:
       type: integer
 python_dependencies:
-  - httpx>=0.24
+  - httpx==0.24.1
 """
     m = PluginManifest.from_yaml_string(yaml)
     assert m.id == "acme-monitor"
     assert len(m.permissions) == 2
     assert m.api_prefix == "/acme"
     assert m.event_subscriptions == ["device.status.*", "alert.created"]
-    assert m.python_dependencies == ["httpx>=0.24"]
+    assert m.python_dependencies == ["httpx==0.24.1"]
     assert m.nav_items[0].icon == "Activity"
 
 
@@ -297,13 +297,16 @@ api_prefix: "{bad_prefix}"
 # ── Python dependencies validation ──────────────────────────────────
 
 
+# Exact pins only. A loose specifier lets a transitive upgrade change what
+# actually runs on an operator's appliance between validate and install, so the
+# runtime refuses one -- and these cases used to assert the opposite.
 @pytest.mark.parametrize(
     "good_deps",
     [
-        ["requests>=2.28"],
-        ["httpx>=0.24", "pydantic>=2.0"],
+        ["requests==2.28.0"],
+        ["httpx==0.24.1", "pydantic==2.0.3"],
         ["my-package==1.0.0"],
-        ["PyYAML>=6.0"],
+        ["PyYAML==6.0.1"],
     ],
 )
 def test_valid_python_deps_accepted(good_deps):
@@ -328,6 +331,10 @@ python_dependencies:
         "--index-url https://evil.com/simple",  # pip option
         "module;rm -rf /",  # Semicolon injection
         "!invalid",  # Special char start
+        "requests>=2.28",  # Loose specifier - refused at install
+        "httpx~=0.24.0",  # Compatible-release specifier - same
+        "requests",  # Unpinned entirely
+        "requests[socks]==2.31.0",  # Extras pull in an unpinned tree
     ],
 )
 def test_invalid_python_dep_rejected(bad_dep):

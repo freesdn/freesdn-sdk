@@ -1,0 +1,22 @@
+"""
+pytest configuration for {plugin_name}.
+
+``freesdn-sdk init`` prints "Run tests: pytest tests/" as the next step, and
+without this file that exact command dies at collection with
+``ModuleNotFoundError: No module named 'plugin'``. pytest puts the *test*
+directory on sys.path, never the plugin root, and a bare ``pytest`` -- unlike
+``python -m pytest`` -- does not add the working directory either. So
+``from plugin import {class_name}`` in tests/test_plugin.py had nowhere to find
+plugin.py, and every author hit it on their first run.
+
+Putting the plugin root on sys.path here makes the printed command work however
+it is invoked. Keep this file if you add tests that import your plugin.
+"""
+
+import sys
+from pathlib import Path
+
+_PLUGIN_ROOT = str(Path(__file__).resolve().parent.parent)
+
+if _PLUGIN_ROOT not in sys.path:
+    sys.path.insert(0, _PLUGIN_ROOT)

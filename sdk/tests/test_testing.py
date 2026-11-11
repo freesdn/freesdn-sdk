@@ -92,7 +92,8 @@ class TestMockAlertSDK:
         alert = await mock_alerts.create("Down", "Switch is down", severity="critical")
         assert alert["title"] == "Down"
         assert alert["severity"] == "critical"
-        assert alert["status"] == "active"
+        assert alert["deduplicated"] is False
+        assert mock_alerts.alerts[0]["status"] == "firing"
 
         alerts = await mock_alerts.list()
         assert len(alerts) == 1

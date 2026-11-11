@@ -330,6 +330,40 @@ SAFE_BUILTINS: frozenset[str] = frozenset(
 )
 
 
+# ── Plugin capability vocabulary ──────────────────────────────────────
+
+#: Every capability a plugin may declare in ``plugin.yaml`` under
+#: ``permissions[].code``. Mirrors ``app.plugins.capabilities.CAPABILITIES``,
+#: which is the runtime's single source of truth and which the runtime manifest
+#: validator enforces before anything is installed.
+#:
+#: The vocabulary is CLOSED, and this package used to leave it open at both
+#: ends. A manifest declaring ``firewall.admin`` or ``superuser`` validated
+#: cleanly here and then rendered in the install consent dialog as a real
+#: permission while enforcing nothing; and the reverse -- a singular typo like
+#: ``device.read`` -- also validated cleanly, then raised "requires undeclared
+#: permission" the first time the installed plugin read a device.
+PLUGIN_CAPABILITIES: frozenset[str] = frozenset(
+    {
+        "alerts.read",
+        "alerts.write",
+        "devices.read",
+        "devices.register",
+        "devices.stage",
+        "metrics.read",
+        "sites.read",
+    }
+)
+
+#: The subset that lets a plugin CHANGE something rather than observe it.
+#: Mirrors ``app.plugins.capabilities.MUTATING_CAPABILITIES``; the install
+#: consent dialog leads with these, because a read-only plugin is a materially
+#: smaller decision than one that can propose a device write.
+MUTATING_CAPABILITIES: frozenset[str] = frozenset(
+    {"alerts.write", "devices.register", "devices.stage"}
+)
+
+
 # ── Plugin Limits ────────────────────────────────────────────────────
 
 #: Hard limits enforced by the FreeSDN runtime.

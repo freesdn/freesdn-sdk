@@ -18,11 +18,10 @@ from freesdn_sdk import FreeSDNPlugin, PluginContext
 
 ## Installation
 
-```bash
-pip install freesdn
-```
-
-This automatically installs `freesdn-sdk` as a dependency.
+Neither `freesdn` nor `freesdn-sdk` is on PyPI yet: both names there are
+placeholders (0.0.1). Install the SDK from its release tag, as
+https://github.com/freesdn/freesdn-sdk#install shows; it is what this
+package wraps.
 
 ## Quick Start
 

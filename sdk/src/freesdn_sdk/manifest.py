@@ -20,7 +20,32 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from freesdn_sdk.types import PLUGIN_CAPABILITIES, RESERVED_PLUGIN_IDS
+
+#: Exact-pin rule for ``python_dependencies``. It used to end in
+#: ``([<>=!~]+...)?``, which accepted ``requests>=2.28`` and even a bare
+#: ``requests`` -- both of which the runtime refuses at install. An author who
+#: ran ``freesdn-sdk validate``, saw it pass, packaged and uploaded got their
+#: first error from somebody else's instance. Loose specifiers are rejected for
+#: supply-chain reasons: a transitive upgrade between validate and install
+#: changes what actually runs on an operator's appliance.
+_PYTHON_DEP_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*==[a-zA-Z0-9_.]+$")
+
+#: Regex for valid entry_point file names.
+_ENTRY_POINT_PATTERN = re.compile(r"^[a-zA-Z0-9_/\-]+\.py$")
+
+#: Regex for valid api_prefix values.
+_API_PREFIX_PATTERN = re.compile(r"^/[a-z0-9][a-z0-9/_-]*$")
+
+#: Regex for valid public route paths. Same shape as api_prefix.
+_PUBLIC_ROUTE_PATH_PATTERN = re.compile(r"^/[a-z0-9][a-z0-9/_-]*$")
+
+#: Methods a public (unauthenticated, HMAC-signed) route may declare. GET is
+#: excluded on purpose: an unauthenticated read endpoint is a data-exposure
+#: surface, and a webhook receiver never needs one.
+_PUBLIC_ROUTE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 class PluginDependency(BaseModel):
@@ -30,9 +55,29 @@ class PluginDependency(BaseModel):
 
 
 class PluginPermission(BaseModel):
+    """One capability a plugin asks for, shown in the install consent dialog.
+
+    ``code`` used to be any string at all here, while the runtime validated it
+    against a fixed vocabulary. So a manifest declaring ``firewall.admin`` or
+    ``superuser`` passed ``freesdn-sdk validate`` and was then refused at
+    install -- and a typo like ``device.read`` (singular) did the same.
+    """
+
     code: str
     name: str
     description: str = ""
+
+    @field_validator("code")
+    @classmethod
+    def _validate_code(cls, v: str) -> str:
+        if v not in PLUGIN_CAPABILITIES:
+            raise ValueError(
+                f"Unknown plugin capability {v!r}. FreeSDN enforces a fixed "
+                f"vocabulary, because a declared permission the platform does "
+                f"not enforce is consent theatre. Valid codes: "
+                f"{', '.join(sorted(PLUGIN_CAPABILITIES))}"
+            )
+        return v
 
 
 class PluginNavItem(BaseModel):
@@ -42,42 +87,47 @@ class PluginNavItem(BaseModel):
     order: int = 50
 
 
-#: Regex for valid python dependency specifications.
-_PYTHON_DEP_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*([<>=!~]+[a-zA-Z0-9_.* ]+)?$")
+class PluginPublicRoute(BaseModel):
+    """An unauthenticated route the platform mounts outside the session guard.
 
-#: Regex for valid entry_point file names.
-_ENTRY_POINT_PATTERN = re.compile(r"^[a-zA-Z0-9_/\-]+\.py$")
+    The field was absent from this model entirely, and because unknown keys are
+    dropped rather than rejected, a manifest declaring ``public_routes`` lost
+    them SILENTLY: ``freesdn-sdk validate`` printed a clean bill of health, the
+    packaged plugin installed, and its webhook receiver 404ed with nothing
+    anywhere saying why.
 
-#: Regex for valid api_prefix values.
-_API_PREFIX_PATTERN = re.compile(r"^/[a-z0-9][a-z0-9/_-]*$")
+    Requests to these routes are authenticated with the platform's per-org HMAC
+    scheme rather than a session. See the SDK reference for the header set.
+    """
 
-#: Reserved IDs that must not be used by plugins (core module namespaces).
-_RESERVED_IDS: frozenset[str] = frozenset(
-    {
-        "admin",
-        "auth",
-        "api",
-        "core",
-        "system",
-        "devices",
-        "alerts",
-        "users",
-        "settings",
-        "backup",
-        "vpn",
-        "automation",
-        "webhooks",
-        "ai",
-        "collector",
-        "integrations",
-        "plugins",
-        "marketplace",
-        "health",
-        "status",
-        "metrics",
-        "internal",
-    }
-)
+    path: str
+    methods: list[str] = Field(default_factory=lambda: ["POST"])
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, v: str) -> str:
+        if ".." in v:
+            raise ValueError("public route path must not contain path traversal")
+        if not _PUBLIC_ROUTE_PATH_PATTERN.match(v):
+            raise ValueError(
+                "public route path must start with '/' and contain only "
+                "lowercase alphanumeric characters, hyphens, underscores, and slashes"
+            )
+        return v.rstrip("/") or "/"
+
+    @field_validator("methods")
+    @classmethod
+    def _validate_methods(cls, methods: list[str]) -> list[str]:
+        normalized = [method.upper() for method in methods]
+        if not normalized:
+            raise ValueError("public route methods must not be empty")
+        invalid = sorted({m for m in normalized if m not in _PUBLIC_ROUTE_METHODS})
+        if invalid:
+            raise ValueError(
+                f"public route methods must be one of "
+                f"{sorted(_PUBLIC_ROUTE_METHODS)}; got {invalid}"
+            )
+        return normalized
 
 
 class PluginSchedule(BaseModel):
@@ -116,12 +166,6 @@ class PluginSchedule(BaseModel):
                 "method must not start with an underscore -- a schedule is a "
                 "public entry point, not an internal helper"
             )
-        if v in {"on_start", "on_stop", "on_event", "get_router"}:
-            raise ValueError(
-                f"method {v!r} is a lifecycle hook; a schedule must call a "
-                "method of its own. Running on_start on a timer re-initialises "
-                "a runtime that is already started."
-            )
         return v
 
 
@@ -130,9 +174,29 @@ class PluginManifest(BaseModel):
 
     Use ``PluginManifest.from_yaml("plugin.yaml")`` to load and validate.
 
-    Validation rules match the FreeSDN runtime exactly, so if a manifest
-    passes SDK validation it will also pass at installation time.
+    This model is kept in step with the runtime validator in
+    ``app.plugins.schema``, and ``tests/test_sdk_parity.py`` is the gate that
+    keeps it there: it feeds a corpus of manifests to both models and fails if
+    they ever disagree on a verdict. That gate exists because the two DID
+    disagree -- on ``==`` pinning, on the reserved-id list, on the permission
+    vocabulary, on recursive event wildcards, on the reserved api_prefix
+    segment, and on ``public_routes``, which this model dropped on the floor
+    entirely. Every one of those was a manifest that passed
+    ``freesdn-sdk validate`` and was then refused (or quietly truncated) at
+    install, which is the worst possible place for an author to find out.
+
+    One difference remains, and it is the runtime's shape rather than a gap:
+    unknown top-level keys are IGNORED, not rejected. Registry metadata
+    (``category``, ``tags``, ``slug``, ``requires_python``) lives in plugin.yaml
+    beside the manifest fields and is read by the catalogue build, so
+    ``extra="forbid"`` here would reject all twelve plugins in the official
+    registry.
     """
+
+    #: Unknown keys are ignored, matching the runtime exactly. Stated rather
+    #: than inherited from pydantic's default so nobody "tightens" it without
+    #: reading the paragraph above.
+    model_config = ConfigDict(extra="ignore")
 
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9\-]{0,98}[a-z0-9]$")
     name: str = Field(min_length=1, max_length=200)
@@ -150,6 +214,7 @@ class PluginManifest(BaseModel):
     permissions: list[PluginPermission] = []
     api_prefix: str | None = None
     nav_items: list[PluginNavItem] = []
+    public_routes: list[PluginPublicRoute] = []
 
     event_subscriptions: list[str] = Field(default=[])
     settings_schema: dict[str, Any] | None = None
@@ -158,24 +223,61 @@ class PluginManifest(BaseModel):
     schedules: list[PluginSchedule] = Field(default=[], max_length=10)
 
     @model_validator(mode="after")
-    def _validate_schedule_names(self) -> PluginManifest:
-        """Names must be unique, matching the platform.
+    def _validate_schedules(self) -> PluginManifest:
+        """Names must be unique, and no schedule may target a lifecycle hook.
 
         Duplicates collide on the scheduler's claim key, so two schedules
         declared 15 minutes apart silently become one -- and the one that
-        vanished is still listed in the UI.
+        vanished is still listed in the UI. And letting a schedule call
+        ``on_start`` re-runs a plugin's initialisation on a timer against a
+        runtime that is already started, duplicating every registration the
+        hook performs.
         """
         seen: set[str] = set()
         for sched in self.schedules:
             if sched.name in seen:
                 raise ValueError(f"duplicate schedule name {sched.name!r}")
             seen.add(sched.name)
+            if sched.method in {"on_start", "on_stop", "on_event", "get_router"}:
+                raise ValueError(
+                    f"schedule {sched.name!r} targets the lifecycle hook "
+                    f"{sched.method!r}; schedules must call a method of their own"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_event_subscriptions(self) -> PluginManifest:
+        """Keep plugin event subscriptions inside the contract.
+
+        A plugin may subscribe to its OWN ``plugin.{id}.*`` namespace freely and
+        to SPECIFIC native events, but it must not slurp an entire native
+        namespace with a recursive ``#`` wildcard (``device.#``) nor request the
+        bare ``*`` / ``#`` firehose -- that turns the declared-subscription
+        contract into platform-wide visibility of native device activity.
+
+        This model accepted all three. The runtime refuses them at parse time,
+        so a manifest built around ``device.#`` validated at the author's desk
+        and was rejected on install.
+        """
+        own_prefix = f"plugin.{self.id}."
+        for pattern in self.event_subscriptions:
+            p = (pattern or "").strip()
+            if not p or p in {"*", "#"}:
+                raise ValueError("event_subscriptions must not contain the bare '*' / '#' firehose")
+            if p == self.id or p.startswith(own_prefix) or p == f"plugin.{self.id}":
+                continue  # own namespace -- unrestricted
+            if "#" in p:
+                raise ValueError(
+                    f"event subscription '{p}' uses a recursive '#' wildcard outside the "
+                    f"plugin's own 'plugin.{self.id}.*' namespace; subscribe to specific "
+                    "native events instead"
+                )
         return self
 
     @field_validator("id")
     @classmethod
     def _validate_id(cls, v: str) -> str:
-        if v in _RESERVED_IDS:
+        if v in RESERVED_PLUGIN_IDS:
             raise ValueError(f"Plugin ID '{v}' is reserved and cannot be used")
         return v
 
@@ -219,6 +321,17 @@ class PluginManifest(BaseModel):
                 "api_prefix must start with '/' and contain only "
                 "lowercase alphanumeric characters, hyphens, underscores, and slashes"
             )
+        # The first path segment must not collide with a native module / core
+        # namespace. This model checked only the plugin ID, so ``id: acme`` with
+        # ``api_prefix: /cameras`` validated here and was refused at install --
+        # refused for a reason worth restating: routes mounted under
+        # /api/v1/cameras read as first-party, and that is exactly the
+        # native-vs-plugin trust boundary the two-tier model rests on.
+        first_segment = v.strip("/").split("/", 1)[0]
+        if first_segment in RESERVED_PLUGIN_IDS:
+            raise ValueError(
+                f"api_prefix '/{first_segment}' is reserved by a native module / core namespace"
+            )
         return v
 
     @field_validator("python_dependencies")
@@ -228,9 +341,15 @@ class PluginManifest(BaseModel):
             dep_stripped = dep.strip()
             if not _PYTHON_DEP_PATTERN.match(dep_stripped):
                 raise ValueError(
-                    f"Invalid dependency spec: '{dep}'. "
-                    "Only package names with version pins are allowed."
+                    f"Dependency '{dep_stripped}' must use exact version pinning "
+                    "(e.g., 'requests==2.31.0'). Loose specifiers (>=, ~=, etc.) "
+                    "are not allowed for supply-chain safety."
                 )
+            # Extras pull in a dependency tree the pin does not describe, so
+            # ``requests[socks]==2.31.0`` is not the reproducible install it
+            # looks like.
+            if "[" in dep_stripped:
+                raise ValueError(f"Dependency extras not allowed: {dep_stripped}")
             if dep_stripped.startswith("-") or ";" in dep_stripped:
                 raise ValueError(f"Dependency spec contains disallowed characters: '{dep}'")
         return deps

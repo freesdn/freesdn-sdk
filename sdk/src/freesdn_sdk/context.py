@@ -12,6 +12,7 @@ These stubs raise NotImplementedError if called outside FreeSDN.
 
 from __future__ import annotations
 
+import builtins
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -25,44 +26,132 @@ _RUNTIME_ONLY = (
 
 
 class DeviceSDK:
-    """Read-only access to the device inventory.
+    """Read access to the device inventory, plus staged configuration writes.
 
     Available as ``self.ctx.devices`` inside your plugin.
-    Requires ``devices.read`` permission in plugin.yaml.
+    Reads require ``devices.read`` in plugin.yaml; :meth:`stage_change`
+    requires ``devices.stage``.
     """
+
+    #: Ceiling on :meth:`iter_all`, mirroring the runtime. Walking an unbounded
+    #: inventory in one pass is a memory profile nobody signed up for, so it
+    #: stops loudly rather than degrading quietly.
+    MAX_ITER_ROWS = 50_000
+
+    #: The staged-change notes column is Text and a plugin must not be able to
+    #: fill it, so your note is truncated to this many characters -- the
+    #: ``[plugin:<id>]`` provenance prefix included.
+    MAX_NOTE_CHARS = 2000
 
     async def list(
         self,
         status: str | None = None,
         site_id: UUID | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """List devices visible to this organization.
+        """One page of devices visible to this organization.
+
+        ``limit`` is CAPPED at 500 per call however much you ask for, and
+        ``offset`` was absent from this stub entirely -- so a plugin that pages
+        through a large estate could not be written against the published SDK
+        at all, while one that asked for 2000 in a single call type-checked
+        green and silently received 500. Use :meth:`iter_all` for a full scan.
 
         Args:
             status: Filter by status ("online", "offline", "unknown").
             site_id: Filter by site UUID.
-            limit: Max results (1–500).
+            limit: Max results per page (1-500).
+            offset: Rows to skip. Paging is ordered by device id.
 
         Returns:
-            List of device dicts with keys: id, name, type, status, ip, mac, site_id.
+            List of device dicts with keys: id, name, type, status, ip, mac,
+            serial_number, manufacturer, site_id, controller_id.
         """
-        raise NotImplementedError("DeviceSDK only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
+
+    def iter_all(
+        self,
+        status: str | None = None,
+        site_id: UUID | None = None,
+        page_size: int = 500,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Every device visible to this organization, a page at a time.
+
+        The honest way to scan an estate, and what eight of the twelve plugins
+        in the official registry actually call -- none of which could
+        type-check or offline-test against this package while the method was
+        missing from it::
+
+            async for device in self.ctx.devices.iter_all():
+                ...
+
+        Raises ``RuntimeError`` rather than truncating past
+        :attr:`MAX_ITER_ROWS`: a plugin author needs to know when their
+        assumptions broke.
+        """
+        raise NotImplementedError(_RUNTIME_ONLY)
 
     async def get(self, device_id: UUID) -> dict[str, Any] | None:
         """Get a single device by ID.
 
         Returns None if not found or not in this organization.
         """
-        raise NotImplementedError("DeviceSDK only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
 
-    async def get_ports(self, device_id: UUID) -> list[dict[str, Any]]:
+    async def get_ports(self, device_id: UUID) -> builtins.list[dict[str, Any]]:
         """Get ports for a device.
 
         Returns:
-            List of port dicts with keys: id, name, port_number, status, speed, poe_enabled.
+            List of port dicts with keys: id, name, port_number, port_type,
+            status, is_enabled, speed_mbps, duplex, vlan_id, poe_enabled,
+            poe_power_watts, poe_class, tx_bytes, rx_bytes, errors. ``speed``
+            is kept as an alias of ``speed_mbps`` for older plugins.
         """
-        raise NotImplementedError("DeviceSDK only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
+
+    async def stage_change(
+        self,
+        *,
+        controller_id: UUID,
+        feature: str,
+        operation: str,
+        payload: dict[str, Any],
+        site_id: UUID | None = None,
+        target_id: str | None = None,
+        notes: str | None = None,
+    ) -> dict[str, Any]:
+        """Propose a device configuration change. Staged only, never applied.
+
+        This is what makes a plugin more than an observer, and the reason it is
+        safe to grant is that it does not shorten the path to a device by one
+        step: the change lands in the staging table and reaches hardware only
+        when an operator applies it, behind the same two gates as every other
+        write. A plugin cannot apply, and there is deliberately no SDK method
+        that can.
+
+        Provenance is not optional. The staged row's notes always begin with
+        ``[plugin:<id>]``, so the operator reading the pending-changes list
+        sees where the proposal came from before approving it. Your own note is
+        appended, never substituted, and the result is truncated to
+        :attr:`MAX_NOTE_CHARS`.
+
+        Args:
+            controller_id: The controller that owns the target. Take it from
+                the ``controller_id`` key of a device dict.
+            feature: Adapter feature key, e.g. ``"omada.vlan"``.
+            operation: ``create`` | ``update`` | ``delete``. Anything else is
+                rejected (HTTP 400 at runtime).
+            payload: The change body the applier will send.
+            site_id: Target site. Required for site-scoped features.
+            target_id: Vendor-side id of the object being changed, if any.
+            notes: Why. Shown to the operator deciding whether to apply.
+
+        Returns:
+            The staged change: ``id``, ``status``, ``feature``, ``operation``,
+            ``site_id``.
+        """
+        raise NotImplementedError(_RUNTIME_ONLY)
 
 
 class SiteSDK:
@@ -180,14 +269,23 @@ class AlertSDK:
         self,
         severity: str | None = None,
         limit: int = 50,
+        status: str | None = None,
     ) -> list[dict[str, Any]]:
-        """List active alerts for this organization.
+        """List alerts for this organization.
+
+        ``status`` filters on the alert lifecycle, whose values are "firing",
+        "acknowledged" and "resolved". It was missing from this stub while the
+        runtime had it, so the five registry plugins that call
+        ``alerts.list(status="firing")`` to find the alert they raised could not
+        type-check against the published SDK.
 
         Args:
             severity: Filter by severity ("info", "warning", "error", "critical").
-            limit: Max results (1–200).
+            limit: Max results (1-200).
+            status: Filter by lifecycle status ("firing", "acknowledged",
+                "resolved").
         """
-        raise NotImplementedError("AlertSDK only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
 
     async def create(
         self,
@@ -198,25 +296,30 @@ class AlertSDK:
     ) -> dict[str, Any]:
         """Create a new alert.
 
+        Identical alerts are deduplicated for an hour: a repeat bumps the
+        occurrence count on the open alert instead of raising a second one, and
+        does not re-notify.
+
         Args:
-            title: Alert title (max 200 chars).
-            message: Alert body (max 2000 chars).
-            severity: One of "info", "warning", "error", "critical".
+            title: Alert title (truncated to 200 chars).
+            message: Alert body (truncated to 2000 chars).
+            severity: One of "info", "warning", "error", "critical". Anything
+                else raises ``ValueError``.
             device_id: Optional device UUID to link the alert to.
 
         Returns:
-            Dict with keys: id, title, severity.
+            Dict with keys: id, title, severity, deduplicated.
         """
-        raise NotImplementedError("AlertSDK only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
 
     async def resolve(self, alert_id: UUID, resolution: str = "") -> None:
         """Resolve an existing alert.
 
         Args:
             alert_id: UUID of the alert to resolve.
-            resolution: Optional resolution message.
+            resolution: Optional resolution message (truncated to 2000 chars).
         """
-        raise NotImplementedError("AlertSDK only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
 
 
 class EventSDK:
@@ -315,23 +418,45 @@ class PluginHTTPClient:
       - Timeout capped at 60 seconds
       - Response size limited to 10 MB
       - User-Agent set to ``FreeSDN-Plugin/{plugin_id}/{version}``
+      - Request kwargs allowlisted to json, data, params, content, cookies and
+        headers; a few header names (host, cookie, the x-forwarded-* family,
+        proxy-authorization, transfer-encoding) are dropped with a warning.
+        ``Authorization`` is NOT dropped -- most external APIs need it.
     """
+
+    #: Maximum allowed timeout in seconds. A larger value is clamped, not
+    #: rejected.
+    MAX_TIMEOUT = 60.0
+    #: Maximum response body size (10 MB). A larger body raises ``ValueError``
+    #: AFTER the request, so a plugin that streams a big export fails on the
+    #: appliance rather than in your tests -- the mock enforces the same cap.
+    MAX_RESPONSE_SIZE = 10 * 1024 * 1024
 
     async def get(self, url: str, **kwargs: Any) -> Any:
         """Send a GET request."""
-        raise NotImplementedError("PluginHTTPClient only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
 
     async def post(self, url: str, **kwargs: Any) -> Any:
         """Send a POST request."""
-        raise NotImplementedError("PluginHTTPClient only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
 
     async def put(self, url: str, **kwargs: Any) -> Any:
         """Send a PUT request."""
-        raise NotImplementedError("PluginHTTPClient only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
+
+    async def patch(self, url: str, **kwargs: Any) -> Any:
+        """Send a PATCH request.
+
+        PATCH is the verb every ticketing API expects for a partial update, and
+        its absence here was not theoretical: servicenow-incidents closes and
+        annotates an incident through ``ctx.http.patch``, so against the
+        published stub that call did not type-check at all.
+        """
+        raise NotImplementedError(_RUNTIME_ONLY)
 
     async def delete(self, url: str, **kwargs: Any) -> Any:
         """Send a DELETE request."""
-        raise NotImplementedError("PluginHTTPClient only works inside FreeSDN runtime")
+        raise NotImplementedError(_RUNTIME_ONLY)
 
 
 @dataclass

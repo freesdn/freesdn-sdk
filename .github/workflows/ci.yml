@@ -16,7 +16,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # qualification/** carries a release candidate before main moves.
+    branches: [main, 'qualification/**']
   pull_request:
     branches: [main]
   # A plugin author installs this package weeks after we last touched it, so a
@@ -48,7 +49,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: ${{ matrix.python }}
 
@@ -68,6 +69,10 @@ jobs:
       - name: Ruff format check
         working-directory: sdk
         run: ruff format --check src tests
+
+      - name: Public SDK type contracts
+        working-directory: sdk
+        run: mypy src
 
       - name: Tests
         working-directory: sdk
@@ -103,7 +108,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: '3.11'
 
@@ -143,7 +148,7 @@ jobs:
           /tmp/verify/bin/pip install --quiet dist/*.whl
           /tmp/verify/bin/freesdn-sdk --help
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: dist
           path: sdk/dist/
@@ -156,7 +161,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: '3.11'
 

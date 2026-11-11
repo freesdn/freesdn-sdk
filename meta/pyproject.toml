@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "freesdn"
-version = "0.2.1"
+version = "0.3.0"
 description = "Convenience wrapper that re-exports the FreeSDN plugin SDK (freesdn-sdk) under the shorter `freesdn` import path."
 readme = "README.md"
 license = "MIT"
@@ -41,9 +41,9 @@ Issues = "https://github.com/freesdn/freesdn/issues"
 # The wrapper has no runtime dev needs of its own; these exist so its parity
 # tests can run in CI, which it did not have.
 dev = [
-    "pytest>=8.0",
-    "ruff>=0.4",
-    "build>=1.0",
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+    "build>=1.6.1",
 ]
 
 [tool.ruff]

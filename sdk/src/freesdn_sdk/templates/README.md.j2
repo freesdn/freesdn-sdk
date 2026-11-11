@@ -14,11 +14,18 @@ freesdn-sdk package .
 ## Development
 
 ```bash
-pip install freesdn-sdk
+# freesdn-sdk is not on PyPI yet: install it from its release tag, as
+# https://github.com/freesdn/freesdn-sdk#install shows.
+# pytest-asyncio too: the generated tests are async, and without it pytest
+# fails them with "async def functions are not natively supported".
+pip install pytest pytest-asyncio
 pytest tests/
 freesdn-sdk validate .
 freesdn-sdk check .
 ```
+
+`tests/conftest.py` puts this directory on `sys.path` so `from plugin import ...`
+resolves. Run `pytest` from the plugin root.
 
 ## License
 

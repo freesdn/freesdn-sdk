@@ -5,6 +5,142 @@ All notable changes to the FreeSDN Plugin SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-11
+
+The SDK had drifted from the FreeSDN runtime again, in the three places a plugin
+author meets first: the scaffold, the validator and the test doubles. Each gap
+was something that passed at your desk and failed on an appliance. Most of this
+release is the SDK refusing, offline, what FreeSDN already refused at install or
+at run time, and gaining the methods the runtime already had. Expect some of
+your own tests to need small changes; see Upgrading.
+
+### Security
+
+- **`freesdn-sdk package` could put credentials into the plugin ZIP.** Hidden
+  directories were left out, but hidden files were matched against a four-name
+  list (`.DS_Store`, `Thumbs.db`, `.env`, `.env.local`), so `.env.production`,
+  `.envrc`, `.pypirc`, `.netrc` and `.npmrc` went in, and so did `id_rsa` and
+  `*.pem`. Every dotfile is now left out, as are common key and credential
+  files by name (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `credentials`,
+  `credentials.json`, `secrets.json`, `service-account.json`) and key material
+  by extension (`.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`). If you
+  published a package built with an earlier version, open the ZIP, and rotate
+  anything you find in it.
+
+### Added
+
+These existed in the FreeSDN runtime and were missing from this package, so
+plugins that used them did not type-check and could not be tested offline.
+
+- `DeviceSDK.iter_all()`, which pages through every device, and an `offset`
+  argument on `DeviceSDK.list()`. `list()` returns at most 500 rows however many
+  you ask for.
+- `DeviceSDK.stage_change()` (capability `devices.stage`). It stages a change
+  and never applies it: an operator applies it behind the same two gates as
+  every other write. The staged note always starts with `[plugin:<id>]`.
+- `AlertSDK.list(status=...)`, with "firing", "acknowledged" or "resolved".
+- `PluginHTTPClient.patch()`.
+- `public_routes` in the manifest model. The field was missing, and unknown keys
+  are ignored, so a manifest declaring a webhook route validated cleanly,
+  installed, and its route answered 404. Methods are POST, PUT, PATCH or DELETE;
+  GET is refused.
+- `freesdn_sdk.types.PLUGIN_CAPABILITIES` (the seven capability codes a manifest
+  may declare) and `MUTATING_CAPABILITIES`.
+- `create_test_context(permissions=..., event_subscriptions=..., manifest=...)`.
+  With them the mocks apply the platform's capability check and raise the same
+  `PermissionError`. `manifest=PluginManifest.from_yaml("plugin.yaml")` takes
+  both from the manifest you ship. Without them the context stays ungated, as
+  before.
+- `delete()` on the settings mock, so a plugin that removes a per-alert setting
+  on resolve can test that path.
+- The runtime's limits as constants: `DeviceSDK.MAX_ITER_ROWS` (50,000),
+  `DeviceSDK.MAX_NOTE_CHARS` (2,000), `PluginHTTPClient.MAX_TIMEOUT` (60 s) and
+  `PluginHTTPClient.MAX_RESPONSE_SIZE` (10 MB).
+
+### Changed
+
+- **`freesdn-sdk validate` now refuses what FreeSDN refused at install.** Each
+  of these used to pass `validate` and fail on somebody else's instance:
+  - `python_dependencies` must be exact `==` pins. `requests>=2.28`,
+    `httpx~=0.24.0` and a bare `requests` are refused, and so are extras such as
+    `requests[socks]==2.31.0`.
+  - `permissions[].code` must be one of the seven capabilities. `firewall.admin`
+    or a singular `device.read` used to validate.
+  - The plugin id and the first segment of `api_prefix` are checked against the
+    full reserved list, which includes `cameras`, `firewall`, `network`,
+    `storage` and `voip`.
+  - `event_subscriptions` may not be a bare `*` or `#`, and a recursive `#` is
+    allowed only inside your own `plugin.<id>.` namespace.
+- **The mocks behave like the platform.**
+  - Device and site lists are capped at 500 per call, alert lists at 200, metric
+    queries at 5,000 points and metric names at 500. Lists are ordered by id,
+    as the runtime pages them.
+  - `alerts.create()` rejects an unknown severity with `ValueError`, truncates
+    the title to 200 and the message to 2,000 characters, and deduplicates an
+    identical open alert instead of storing a second one. New alerts have status
+    `"firing"`, the platform's own value, not `"active"`. It returns `id`,
+    `title`, `severity` and `deduplicated`, as the runtime does, not the stored
+    row.
+  - The HTTP mock records only what the platform forwards (`json`, `data`,
+    `params`, `content`, `cookies`, and headers minus `host`, `cookie`, the
+    `x-forwarded-*` family, `proxy-authorization` and `transfer-encoding`), and
+    a response body over 10 MB raises `ValueError`.
+  - `metrics.series()` with an unsupported aggregation raises `ValueError`, as
+    the platform does, not `KeyError`.
+  - With `event_subscriptions` supplied, `events.subscribe()` refuses a pattern
+    the manifest did not declare.
+
+### Fixed
+
+- **`freesdn-sdk init` could write a manifest it could not read.** A quote in
+  `--description` or `--author` produced `description: "a "b" c"`, a YAML
+  error, and the next step it printed, `freesdn-sdk validate .`, failed.
+- **The scaffold's own tests failed on the first run.** `pytest tests/` stopped
+  at collection with `No module named 'plugin'`, and the async tests needed
+  pytest-asyncio, which nothing mentioned. `init` now writes
+  `tests/conftest.py` and tells you to `pip install pytest pytest-asyncio`.
+- **`freesdn-sdk check` scanned test files**, although its own comment said it
+  skipped them, and failed any plugin whose tests import `os` or `pathlib`. The
+  sandbox never imports tests. They are now skipped and counted.
+- A `plugin.yaml` that does not parse now reports the line, column and token,
+  not just "ParserError".
+- **The install instructions installed a placeholder.** The READMEs and the
+  scaffold's README said `pip install freesdn-sdk` (or `freesdn`), but both
+  names on PyPI are 0.0.1 placeholders that reserve them. They now install from
+  the release tag. Two README links that returned 404 point at the
+  documentation instead.
+
+### Dependencies
+
+- Minimum versions raised to what the FreeSDN backend runs, which the SDK's
+  tests run against: pydantic 2.14.3, fastapi 0.141.1, PyYAML 6.0.3 and click
+  8.5.1 (from 2.4, 0.109.1, 6.0 and 8.0). Test extras: pytest 9.2.0 and
+  pytest-asyncio 1.4.1.post1. These are not a response to an advisory in this
+  package.
+- CI type-checks the package with mypy, and a parity test compares the stub,
+  mocks and manifest model with the runtime. It needs a FreeSDN checkout, so it
+  skips in this repository.
+- A release candidate is now pushed to a `qualification/<version>` branch
+  first, and CI must pass there before `main` moves and the tag is pushed.
+
+### Upgrading
+
+- Some tests that passed may now fail, because the mocks no longer accept what
+  the platform refuses. The usual ones:
+  - `alert["status"] == "active"` on the value `create()` returns. Check
+    `ctx.alerts.alerts[...]["status"] == "firing"` instead.
+  - Two identical `create()` calls now leave one alert.
+  - An HTTP-mock assertion on a keyword such as `timeout`, which the platform
+    never forwards.
+  - Code that relied on a mock list keeping insertion order.
+- `freesdn-sdk validate` may reject a manifest it passed before. Each of those
+  manifests was refused by FreeSDN at install.
+- To find under-declared permissions before your users do, build the test
+  context with `manifest=PluginManifest.from_yaml("plugin.yaml")`.
+- `freesdn-sdk` on PyPI is still a name-reservation placeholder (0.0.1). Install
+  this release from the tag:
+  `pip install "freesdn-sdk @ git+https://github.com/freesdn/freesdn-sdk@v0.3.0#subdirectory=sdk"`.
+
 ## [0.2.1] - 2026-08-23
 
 CI only. No change to the package.
